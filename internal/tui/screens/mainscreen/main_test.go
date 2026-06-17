@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/crypto"
+	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/settings"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/overlays/importoverlay"
 	settingspanel "github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/panels/settings"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/wallet"
@@ -26,7 +27,7 @@ func newModel(t *testing.T) Model {
 	c, _ := crypto.New(key)
 	svc := wallet.NewService(dao, c)
 
-	m := New(svc, nil, nil, "") // nil balance + swap services — RPC not exercised in unit tests
+	m := New(svc, nil, nil, dao, settings.Defaults()) // nil balance + swap services — RPC not exercised in unit tests
 	m.SetSize(120, 30)
 	return m
 }

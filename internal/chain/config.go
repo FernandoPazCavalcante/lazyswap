@@ -142,3 +142,9 @@ func NextKey(current string) string {
 	}
 	return OrderedKeys[0]
 }
+
+// Has reports whether key names a configured chain.
+func Has(key string) bool {
+	_, ok := CHAINS[key]
+	return ok
+}

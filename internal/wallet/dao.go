@@ -192,6 +192,11 @@ func (d *DAO) setConfig(key, value string) error {
 	return err
 }
 
+// GetConfig / SetConfig expose the app_config key/value store to other packages
+// (e.g. the settings store). Thin exported wrappers over getConfig/setConfig.
+func (d *DAO) GetConfig(key string) (string, bool, error) { return d.getConfig(key) }
+func (d *DAO) SetConfig(key, value string) error          { return d.setConfig(key, value) }
+
 // GetSalt returns the hex-encoded PBKDF2 salt, or ("", false) if not initialised.
 func (d *DAO) GetSalt() (string, bool, error)     { return d.getConfig(keyEncryptionSalt) }
 func (d *DAO) SetSalt(saltHex string) error       { return d.setConfig(keyEncryptionSalt, saltHex) }

@@ -251,35 +251,12 @@ func deriveAndInitCmd(dao *wallet.DAO, pw string) tea.Cmd {
 
 func deriveAndVerifyCmd(dao *wallet.DAO, pw string) tea.Cmd {
 	return func() tea.Msg {
-		saltHex, ok, err := dao.GetSalt()
+		svc, err := wallet.Unlock(dao, pw)
 		if err != nil {
+			if errors.Is(err, wallet.ErrInvalidPassword) {
+				return loginErrMsg{errors.New("Invalid password. Try again.")}
+			}
 			return loginErrMsg{err}
-		}
-		if !ok {
-			return loginErrMsg{errors.New("encryption salt missing — DB not initialised")}
-		}
-		salt, err := hex.DecodeString(saltHex)
-		if err != nil {
-			return loginErrMsg{err}
-		}
-		key, _, err := crypto.DeriveKey(pw, salt)
-		if err != nil {
-			return loginErrMsg{err}
-		}
-		svc, err := crypto.New(key)
-		if err != nil {
-			return loginErrMsg{err}
-		}
-		sentinel, ok, err := dao.GetSentinel()
-		if err != nil {
-			return loginErrMsg{err}
-		}
-		if !ok {
-			return loginErrMsg{errors.New("password sentinel missing — DB not initialised")}
-		}
-		pt, err := svc.Decrypt(sentinel)
-		if err != nil || pt != crypto.SentinelPlain {
-			return loginErrMsg{errors.New("Invalid password. Try again.")}
 		}
 		return loginInternalSuccessMsg{svc}
 	}

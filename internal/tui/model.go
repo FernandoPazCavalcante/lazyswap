@@ -12,6 +12,7 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/chain"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/crypto"
+	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/settings"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/swap"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/screens/login"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/screens/mainscreen"
@@ -28,6 +29,7 @@ const (
 // Root is the top-level Bubble Tea model.
 type Root struct {
 	dao      *wallet.DAO
+	settings settings.Settings
 	chainKey string
 	screen   screen
 	login    login.Model
@@ -40,18 +42,27 @@ type Root struct {
 }
 
 // NewRoot constructs the root model with the login screen active. chainKey
-// selects the EVM chain for balance + (eventual) swap RPC calls; pass an
-// empty string to use chain.DefaultKey.
+// selects the EVM chain for balance + swap RPC calls; pass an empty string to
+// use the persisted setting (which itself defaults to chain.DefaultKey).
 func NewRoot(dao *wallet.DAO, chainKey string) (Root, error) {
+	st, err := settings.Load(dao)
+	if err != nil {
+		return Root{}, err
+	}
 	if chainKey == "" {
+		chainKey = st.ChainKey
+	}
+	if !chain.Has(chainKey) {
 		chainKey = chain.DefaultKey
 	}
+	st.ChainKey = chainKey // keep the seed in sync with the dialed chain
 	lm, err := login.New(dao)
 	if err != nil {
 		return Root{}, err
 	}
 	return Root{
 		dao:      dao,
+		settings: st,
 		chainKey: chainKey,
 		screen:   screenLogin,
 		login:    lm,
@@ -101,7 +112,7 @@ func (r Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		r.flowSvc = flowSvc
 
-		main := mainscreen.New(walletSvc, balSvc, flowSvc, r.chainKey)
+		main := mainscreen.New(walletSvc, balSvc, flowSvc, r.dao, r.settings)
 		main.SetSize(r.width, r.height)
 		r.main = &main
 		r.screen = screenMain

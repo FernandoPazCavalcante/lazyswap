@@ -17,6 +17,7 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/applog"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/settings"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/swap"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/overlays/importoverlay"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/overlays/swapoverlay"
@@ -28,9 +29,6 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/theme"
 	walletpkg "github.com/FernandoPazCavalcante/lazyswap-tui/internal/wallet"
 )
-
-// DefaultSlippage is the slippage percentage applied to every quoted swap.
-const DefaultSlippage = 0.5
 
 type mode int
 
@@ -62,6 +60,7 @@ const (
 
 // Model owns the main-screen state machine.
 type Model struct {
+	dao     *walletpkg.DAO
 	svc     *walletpkg.Service
 	balSvc  *balance.Service
 	flowSvc *swap.Flow
@@ -91,6 +90,10 @@ type Model struct {
 	wallets []walletpkg.Wallet
 	current *walletpkg.Wallet
 
+	// defaultWallet is the persisted preferred wallet address (settings); the
+	// wallet list selects it on load and updates it when the user switches.
+	defaultWallet string
+
 	// Cache balances per wallet address so flipping wallets doesn't re-fetch.
 	balanceCache map[string][]balance.TokenBalance
 
@@ -99,27 +102,63 @@ type Model struct {
 
 // New constructs a main-screen model. balSvc / flowSvc may be nil — when
 // either is missing the corresponding feature is disabled but the panel
-// remains usable (useful for tests). chainKey selects the active chain; pass
-// an empty string to use chain.DefaultKey.
-func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, chainKey string) Model {
+// remains usable (useful for tests). dao may be nil in tests (persistence is
+// then skipped). st seeds the chain, slippage, and default wallet from the
+// shared, persisted settings.
+func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, dao *walletpkg.DAO, st settings.Settings) Model {
+	chainKey := st.ChainKey
 	if chainKey == "" {
 		chainKey = chain.DefaultKey
 	}
 	c := chain.Get(chainKey)
 	return Model{
-		svc:          svc,
-		balSvc:       balSvc,
-		flowSvc:      flowSvc,
-		panel:        walletpanel.New(),
-		tokens:       tokenspanel.New(),
-		settings:     settingspanel.New(DefaultSlippage, chainKey, c.Name),
-		swapbtc:      swapbtcpanel.New(),
-		imp:          importoverlay.New(),
-		focus:        focusLeft,
-		activeTab:    tabTokens,
-		chainKey:     chainKey,
-		slippage:     DefaultSlippage,
-		balanceCache: make(map[string][]balance.TokenBalance),
+		dao:           dao,
+		svc:           svc,
+		balSvc:        balSvc,
+		flowSvc:       flowSvc,
+		panel:         walletpanel.New(),
+		tokens:        tokenspanel.New(),
+		settings:      settingspanel.New(st.Slippage, chainKey, c.Name),
+		swapbtc:       swapbtcpanel.New(),
+		imp:           importoverlay.New(),
+		focus:         focusLeft,
+		activeTab:     tabTokens,
+		chainKey:      chainKey,
+		slippage:      st.Slippage,
+		defaultWallet: st.DefaultWallet,
+		balanceCache:  make(map[string][]balance.TokenBalance),
+	}
+}
+
+// ─── settings persistence ────────────────────────────────────────────────────
+// Write changes through to the shared settings store so the CLI reads the same
+// values. Best-effort: a failure is logged, never surfaced to the user. A nil
+// dao (tests) skips persistence.
+
+func (m Model) persistSlippage(v float64) {
+	if m.dao == nil {
+		return
+	}
+	if err := settings.SetSlippage(m.dao, v); err != nil {
+		applog.Error("persist slippage", err)
+	}
+}
+
+func (m Model) persistChain(key string) {
+	if m.dao == nil {
+		return
+	}
+	if err := settings.SetChain(m.dao, key); err != nil {
+		applog.Error("persist chain", err)
+	}
+}
+
+func (m Model) persistDefaultWallet(addr string) {
+	if m.dao == nil {
+		return
+	}
+	if err := settings.SetDefaultWallet(m.dao, addr); err != nil {
+		applog.Error("persist default wallet", err)
 	}
 }
 
@@ -340,6 +379,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.wallets = msg.wallets
 		m.panel.SetWallets(msg.wallets)
+		if m.defaultWallet != "" {
+			m.panel.SelectByAddress(m.defaultWallet)
+		}
 		if sel := m.panel.Selected(); sel != nil {
 			m.current = sel
 		} else if len(msg.wallets) > 0 {
@@ -471,6 +513,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case settingspanel.SlippageChangedMsg:
 		m.slippage = msg.Value
 		m.settings.SetSlippage(msg.Value)
+		m.persistSlippage(msg.Value)
 		return m, nil
 
 	case settingspanel.NetworkChangeMsg:
@@ -479,6 +522,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			c := chain.Get(msg.ChainKey)
 			m.chainKey = msg.ChainKey
 			m.settings.SetNetwork(msg.ChainKey, c.Name)
+			m.persistChain(msg.ChainKey)
 			return m, nil
 		}
 		return m, switchChainCmd(msg.ChainKey)
@@ -499,12 +543,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.flowSvc = msg.flowSvc
 		c := chain.Get(msg.chainKey)
 		m.settings.SetNetwork(msg.chainKey, c.Name)
+		m.persistChain(msg.chainKey)
 		m.balanceCache = make(map[string][]balance.TokenBalance)
 		m.errMsg = ""
 		return m, m.balancesCmdForCurrent()
 
 	case walletpanel.SelectionChangedMsg:
 		m.current = msg.Wallet
+		if msg.Wallet != nil {
+			m.persistDefaultWallet(msg.Wallet.Address)
+		}
 		return m, m.balancesCmdForCurrent()
 	}
 

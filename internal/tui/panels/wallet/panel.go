@@ -7,6 +7,7 @@ package wallet
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -79,6 +80,17 @@ func (m *Model) SetWallets(ws []walletpkg.Wallet) {
 		items[i] = Item{W: w}
 	}
 	m.list.SetItems(items)
+}
+
+// SelectByAddress highlights the wallet with the given address if it is in the
+// list; otherwise the current selection is left unchanged.
+func (m *Model) SelectByAddress(addr string) {
+	for i, it := range m.list.Items() {
+		if w, ok := it.(Item); ok && strings.EqualFold(w.W.Address, addr) {
+			m.list.Select(i)
+			return
+		}
+	}
 }
 
 // Selected returns the currently highlighted wallet, or nil if empty.

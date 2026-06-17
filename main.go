@@ -8,11 +8,17 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/applog"
+	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/cli"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui"
 	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/wallet"
 )
 
 func main() {
+	// With arguments, run the non-interactive CLI; with none, launch the TUI.
+	if len(os.Args) > 1 {
+		os.Exit(cli.Run(os.Args[1:]))
+	}
+
 	dao, err := wallet.Open()
 	if err != nil {
 		applog.Error("open dao", err)
