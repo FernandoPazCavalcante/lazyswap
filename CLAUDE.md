@@ -1,7 +1,7 @@
-# CLAUDE.md — lazyswap-tui
+# CLAUDE.md — lazyswap
 
-Go rewrite of the Bun/TS `lazyswap/` app. Bubble Tea TUI + non-interactive CLI for
-on-chain DEX swaps (Uniswap V2 / PancakeSwap on EVM) plus cross-chain BTC via THORchain.
+Go rewrite of the original Bun/TS app (now `lazyswap-old/`). Bubble Tea TUI + non-interactive
+CLI for on-chain DEX swaps (Uniswap V2 / PancakeSwap on EVM) plus cross-chain BTC via THORchain.
 
 Module: `github.com/FernandoPazCavalcante/lazyswap`. Needs **Go 1.26+**.
 
@@ -31,8 +31,8 @@ Layers: **TUI → services → DAO / blockchain**. All packages live under `inte
 - `internal/paths` — filesystem SSOT; `internal/applog` — file logger
 - `internal/cli` — non-interactive commands; `internal/tui` — screens/panels/overlays/theme/keys
 
-Most packages mirror a TS file (`// Mirrors src/...`). When changing behavior, keep parity
-with the Bun reference unless intentionally diverging.
+Most packages mirror a TS file (`// Mirrors src/...`, in `lazyswap-old/`). When changing
+behavior, keep parity with the Bun reference unless intentionally diverging.
 
 ## Critical Rules
 
@@ -55,3 +55,6 @@ with the Bun reference unless intentionally diverging.
 
 - Behavior + data only. **No tests on `View()` / layout / ASCII art** — they churn.
 - CLI env vars: `LAZYSWAP_PASSWORD` (skips prompt), `LAZYSWAP_DATA_DIR`.
+- `lazyswap set password` prints an `export LAZYSWAP_PASSWORD=…` line for the caller to `eval`
+  (a child process can't set the parent shell's env). It only emits the secret when stdout is
+  captured (not a TTY), refusing on a bare terminal to avoid leaking it. See `internal/cli/setpassword.go`.
