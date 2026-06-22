@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/paths"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/paths"
 )
 
 // DAO is a thin wrapper around *sql.DB exposing the wallet/app_config tables.

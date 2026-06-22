@@ -8,15 +8,15 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/applog"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/balance"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/chain"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/crypto"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/settings"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/swap"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/screens/login"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/screens/mainscreen"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/wallet"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/crypto"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/screens/login"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/screens/mainscreen"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
 
 type screen int

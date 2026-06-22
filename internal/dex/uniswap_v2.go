@@ -15,8 +15,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/balance"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
 )
 
 // UniswapV2Provider quotes via a Uniswap V2-compatible router (getAmountsOut).

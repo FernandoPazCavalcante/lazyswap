@@ -1,4 +1,4 @@
-module github.com/FernandoPazCavalcante/lazyswap-tui
+module github.com/FernandoPazCavalcante/lazyswap
 
 go 1.26.3
 

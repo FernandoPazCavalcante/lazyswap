@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/crypto"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/crypto"
 )
 
 // hardhatMnemonic is the well-known Hardhat / Foundry default test phrase.

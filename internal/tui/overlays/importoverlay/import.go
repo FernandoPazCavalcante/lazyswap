@@ -12,7 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/theme"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/theme"
 )
 
 type SubmitMsg struct{ Phrase string }

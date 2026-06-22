@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/paths"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/paths"
 )
 
 type level string

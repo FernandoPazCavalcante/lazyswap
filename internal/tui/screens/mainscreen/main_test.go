@@ -6,11 +6,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/crypto"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/settings"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/overlays/importoverlay"
-	settingspanel "github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/panels/settings"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/wallet"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/crypto"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/importoverlay"
+	settingspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/settings"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
 
 const hardhatPhrase = "test test test test test test test test test test test junk"

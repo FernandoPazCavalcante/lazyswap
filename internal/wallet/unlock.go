@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/crypto"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/crypto"
 )
 
 // ErrNotInitialised means no password has been set yet (salt/sentinel missing).

@@ -7,9 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/balance"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/chain"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/swap"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 )
 
 func sampleBalances() []balance.TokenBalance {

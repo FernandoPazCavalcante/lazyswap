@@ -12,8 +12,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/balance"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/theme"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/theme"
 )
 
 // State enumerates the visible UI states.

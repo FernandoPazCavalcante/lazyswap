@@ -7,10 +7,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/applog"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/cli"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/wallet"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/cli"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/tui"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
 
 func main() {

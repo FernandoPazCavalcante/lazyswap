@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
 )
 
 // stubServer returns an httptest server replying with body for every request,

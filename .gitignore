@@ -1,4 +1,5 @@
 # Compiled binary
+/lazyswap
 /lazyswap-tui
 
 # Release artifacts (scripts/build-release.sh)

@@ -15,10 +15,10 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/chain"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/settings"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/swap"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/wallet"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
 
 // runSwap implements: lazyswap swap <usd> <FROM> <TO> [flags]

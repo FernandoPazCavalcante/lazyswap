@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/balance"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/swap"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 )
 
 const validBTC = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh" // 42 chars

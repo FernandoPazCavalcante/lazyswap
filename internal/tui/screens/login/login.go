@@ -16,9 +16,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/crypto"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/theme"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/wallet"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/crypto"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/theme"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
 
 // LoginSuccessMsg is emitted to the parent when authentication completes.

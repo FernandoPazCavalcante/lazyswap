@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/applog"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
 )
 
 // TokenDiscovery is one unique ERC-20 contract the wallet has touched.

@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/crypto"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/wallet"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/crypto"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
 
 func newTestDAO(t *testing.T) *wallet.DAO {

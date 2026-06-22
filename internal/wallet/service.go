@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/crypto"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/crypto"
 )
 
 // Service bundles create / import / fetch / delete operations.

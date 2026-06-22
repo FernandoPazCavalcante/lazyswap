@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/applog"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
 )
 
 // SwapQuote is the cross-chain quote returned by the Midgard API.

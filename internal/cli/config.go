@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/chain"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/settings"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/wallet"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
 
 // runConfig handles `config`, `config show`, and the `config set-*` setters.

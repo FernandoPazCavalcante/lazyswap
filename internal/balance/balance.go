@@ -19,8 +19,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/chain"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/explorer"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/explorer"
 )
 
 // NativeAddress is the sentinel used to mark the native gas token in the

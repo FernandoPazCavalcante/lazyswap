@@ -13,8 +13,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/tui/theme"
-	walletpkg "github.com/FernandoPazCavalcante/lazyswap-tui/internal/wallet"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/theme"
+	walletpkg "github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
 
 // SelectionChangedMsg fires when the highlighted wallet changes.

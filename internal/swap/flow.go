@@ -12,11 +12,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/applog"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/balance"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/chain"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/dex"
-	"github.com/FernandoPazCavalcante/lazyswap-tui/internal/thorchain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/dex"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/thorchain"
 )
 
 // btcToken is the pseudo-token shown in the ToToken slot of a THORchain quote.
