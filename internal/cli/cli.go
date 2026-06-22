@@ -28,6 +28,8 @@ func Run(args []string) int {
 		return runConfig(args[1:])
 	case "wallets":
 		return runWallets(args[1:])
+	case "set":
+		return runSet(args[1:])
 	case "help", "-h", "--help":
 		usage(os.Stdout)
 		return 0
@@ -58,6 +60,7 @@ Usage:
   lazyswap config set-chain <key>       set the default chain
   lazyswap config set-slippage <pct>    set the default slippage
   lazyswap wallets                      list wallet addresses
+  lazyswap set password                 print an export line; use: eval "$(lazyswap set password)"
   lazyswap help | version
 
 swap flags:
