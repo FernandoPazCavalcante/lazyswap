@@ -1,62 +1,17 @@
-# Technology Stack
+# Tech Stack
 
-## Languages & Runtimes
+**Backend**
+- Go 1.26+ (lazyswap): Bubble Tea (TUI), go-ethereum, btcd/btcutil, modernc.org/sqlite, charmbracelet/lipgloss+bubbles, go-bip39, go-qrcode; AES-256-GCM + PBKDF2 for key encryption.
+- Node.js 18+ (marketingskills, resume): Playwright (Chromium) for PDF rendering; zero-dependency CLI scripts.
+- Scala (rinha-de-backend-2024-q1): Gatling 3.10.3 (JDK 21) for load testing.
+- Bash/Shell (home-server, flagsmith-charts): Docker Compose orchestration, Helm templating.
 
-| Language | Repos | Details |
-|---|---|---|
-| **Python** | phoenix | Core observability platform; packages via uv & pip; conda support |
-| **TypeScript** | phoenix, lazyswap, lazyswap-site | ESM modules, strict mode, pnpm/bun package managers |
-| **JavaScript (Node)** | cloudflare-metrics | Node.js for scripting; Cloudflare GraphQL API client |
-| **Go** | inventory-tui | Go 1.25+; tview library for TUI |
-| **Terraform** | azure-infra | HCL for Azure IaC; Terraform Cloud backend |
-| **YAML/Helm** | flagsmith-charts | Helm chart templates for K8s deployment |
+**Frontend**
+- HTML/CSS (resume): static resumes (EN + PT).
+- Markdown/YAML (marketingskills): Agent Skills content; Claude Code plugin marketplace.
 
-## Frameworks & Libraries
-
-### Backend / Core
-- **OpenTelemetry** (otel) — standard for tracing, used across phoenix package ecosystem
-- **FastAPI** or similar web frameworks in phoenix (implied from REST API, OpenAPI schema)
-- **SQLite** — lazyswap uses for wallet storage
-- **ethers.js v6** — lazyswap EVM blockchain interactions
-
-### Frontend
-- **React 18** — lazyswap-site with TypeScript
-- **Tailwind CSS 4** — utility-first styling (lazyswap-site)
-- **Radix UI** — accessible component library (50+ @radix-ui/* packages in lazyswap-site)
-- **OpenTUI** — terminal UI framework (lazyswap)
-- **tview** — Go TUI library (inventory-tui)
-
-### DevOps & CLI
-- **Vite** — bundler for web projects
-- **Wrangler** — Cloudflare Workers CLI (lazyswap-site)
-- **Bun** — runtime for lazyswap; faster alternative to Node.js
-- **Helm** — K8s package manager (flagsmith-charts)
-- **Docker** — containerisation (phoenix has multi-stage Dockerfile)
-
-### Testing & Linting
-- **Playwright** — E2E testing (phoenix)
-- **pytest** — Python testing (phoenix)
-- **Bun test** — testing framework (lazyswap uses; coverage ≥80% required)
-- **ESLint**, **Prettier** — code quality (multiple repos)
-- **Oxlint**, **Oxfmt** — high-performance linters (phoenix)
-- **pre-commit** — Git hooks (phoenix, flagsmith-charts)
-
-## Package Managers
-
-| Tool | Repos |
-|---|---|
-| **uv** | phoenix (Python) |
-| **pip / conda** | phoenix (alt Python) |
-| **pnpm** | lazyswap-site, phoenix (workspaces) |
-| **npm** | cloudflare-metrics |
-| **bun** | lazyswap (primary) |
-| **go mod** | inventory-tui |
-| **terraform** | azure-infra (no package manager; HCL modules) |
-
-## Notable Patterns
-
-- **Monorepo structure**: phoenix uses `packages/` for multiple related Python/TS packages
-- **Workspace management**: pnpm workspaces for multi-package TypeScript projects
-- **Encryption**: AES-256-GCM + PBKDF2 in lazyswap for wallet security
-- **OpenInference**: phoenix promotes OpenInference standard for LLM observability; rich integration ecosystem
+**Infrastructure**
+- Docker Compose (home-server, rinha-de-backend-2024-q1): multi-file stacks; Caddy v2 (xcaddy with docker-proxy + Cloudflare DNS plugins), Pi-hole v6, Cloudflare Tunnels, Zerotier VPN.
+- Helm (flagsmith-charts): Kubernetes packaging; chart dependencies on Bitnami PostgreSQL, InfluxDB2.
+- PostgreSQL, Nginx (rinha-de-backend-2024-q1 reference implementation).
 
