@@ -1,70 +1,16 @@
-# CI/CD Pipelines
+# CI/CD
 
-## GitHub Actions Workflows
+**Backend**
+- lazyswap: GitHub Actions (`release.yml`) on push to `master`; cross-compiles Go (CGO_ENABLED=0) for linux/darwin × amd64/arm64 → `dist/`; runs `npx semantic-release@24`. Branch strategy: `master` → beta prereleases, `stable` → full releases. Artifacts: `.tar.gz` + `.sha256` to GitHub Releases.
 
-Phoenix (the largest repo) has extensive CI/CD:
+**Frontend**
+- resume: GitHub Actions (`generate-pdf-release.yml`) on `v*` tags; Playwright renders HTML → A4 PDFs; creates GitHub Release with artifacts (90-day retention).
+- marketingskills: GitHub Actions on `main` branch. `validate-skill.yml` (PR/push): Flash-Brew-Digital/validate-skill per changed skill. `sync-skills.yml` (push): node script updates `marketplace.json` + `README.md` via auto-commit.
 
-### Python Testing & Publishing
-- **`python-CI.yml`** — Full matrix testing across Python versions/platforms on every push/PR
-- **`python-all-platforms.yml`** — Extended test suite for edge cases
-- **`publish.yaml`** — Publish Python packages to PyPI and conda-forge; triggered on release
+**Infrastructure**
+- flagsmith-charts: GitHub Actions on `main` / PRs. `lint-test.yaml` (PR): chart-testing (`ct lint` + `ct install`) with kind cluster. `release-please.yml` (push): googleapis/release-please-action manages versioning. `release.yaml` (tag): builds chart tarball → GitHub Release + updates `gh-pages` Helm repo index. Pre-commit: `check-yaml` + `prettier`.
+- rinha-de-backend-2024-q1: GitHub Actions (`repo-lockdown.yml`) auto-closes PRs/issues after deadline (2024-03-11). No build/deploy pipeline.
+- home-server: No CI/CD configured; manual `make` commands only.
 
-### TypeScript Testing & Publishing
-- **`typescript-CI.yml`** — Lint, test, build on PR/push
-- **`typescript-packages-CI.yml`** — Multi-package testing (monorepo)
-- **`typescript-packages-publish.yml`** — Publish @arizeai/* npm packages
-- **`typescript-packages-publish-experimental.yml`** — Experimental releases
-
-### Docker & Release
-- **`docker-build-release.yml`** — Multi-stage build: test → publish to Docker Hub (`arizephoenix/phoenix`) on release
-- **`docker-build-nightly.yml`** — Nightly builds for `latest` tag
-- **`docker-build-experimental.yml`** — Experimental branch builds
-
-### Kubernetes & Deployment
-- **`helm-ci.yml`** — Helm chart linting via Chart Testing (ct)
-- **`helm-release.yaml`** — Release Helm charts to OCI registry
-
-### Documentation & Release Automation
-- **`gh_pages.yml`** — Deploy docs site (ReadTheDocs integration for `arize-phoenix` package)
-- **`release.yml`** — Automated release notes generation
-- **`claude-release-notes.yml`** — Claude-powered release note generation
-- **`sync-lockfile-release-pr.yml`** — Keep dependency locks in sync across PRs
-
-### Testing Infrastructure
-- **`playwright.yaml`** — Browser E2E tests (6000+ lines, comprehensive)
-- **`package-version-check.yml`** — Validate package versioning consistency
-- **`openapi-schema.yaml`** — Auto-generate OpenAPI spec
-
-### LazySwap (Secondary Repos)
-- **No GitHub Actions found** in `.github/workflows/` — implies local testing only or ad-hoc CI
-
-## Branch Strategy
-
-- **Main branches**: `main` (phoenix, lazyswap-site, cloudflare-metrics, resume) or `master` (azure-infra, lazyswap, dev-agents-setup)
-- **Trunk-based**: Pull requests merge to main; CI runs on every push
-- **Release triggers**: Tags trigger Docker builds and package publishing
-
-## Deployment Patterns
-
-| Repo | Deployment Method | Trigger |
-|---|---|---|
-| **phoenix** | Docker Hub + PyPI + npm | Release tag (automated via release-please) |
-| **lazyswap-site** | Vite build (SPA) | Manual or PR to main |
-| **lazyswap** | Bun CLI/binary + npm | Local testing only (no CI/CD found) |
-| **azure-infra** | Terraform Cloud | Manual `terraform apply` per environment |
-| **flagsmith-charts** | OCI registry (Helm) | Release tag |
-
-## Release Strategy
-
-- **release-please**: Automated semantic versioning and changelog generation (phoenix, flagsmith-charts)
-- **.release-please-manifest.json**: Version tracking per package
-- **Semantic versioning**: Major.Minor.Patch throughout
-
-## Artifact Registry
-
-- **Docker Hub**: `arizephoenix/phoenix` images
-- **PyPI**: `arize-phoenix` package and subpackages
-- **npm**: `@arizeai/*` scoped packages
-- **conda-forge**: `arize-phoenix`
-- **Helm OCI**: flagsmith-charts pushed to registry
+**Versioning:** Conventional Commits + semantic-release (lazyswap, marketingskills); release-please (flagsmith-charts).
 

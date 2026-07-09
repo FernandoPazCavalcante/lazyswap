@@ -1,64 +1,145 @@
-# CLAUDE.md — lazyswap
+## Organization context
 
-Go rewrite of the original Bun/TS app (now `lazyswap-old/`). Bubble Tea TUI + non-interactive
-CLI for on-chain DEX swaps (Uniswap V2 / PancakeSwap on EVM) plus cross-chain BTC via THORchain.
+This repository is part of the **FernandoPazCavalcante's Org** organization. Shared org-wide context (overview, tech stack, CI/CD, observability, infrastructure, ticket workflow, integrations) lives in [`.midnax/`](./.midnax/) — read `.midnax/overview.md` first, then the domain files.
 
-Module: `github.com/FernandoPazCavalcante/lazyswap`. Needs **Go 1.26+**.
+## What this is
+
+**lazyswap** is a self-custody terminal wallet — a Vim-style **TUI and a non-interactive CLI** — that executes crypto swaps directly on-chain from your machine. No exchange account, no custodian. It supports EVM chains (Ethereum, BSC) via Uniswap V2 / PancakeSwap, and cross-chain BTC swaps via THORchain.
+
+Go rewrite of the original Bun/TypeScript app (reference: `lazyswap-old/`). Module: `github.com/FernandoPazCavalcante/lazyswap`. Requires **Go 1.26+**.
+
+---
 
 ## Commands
 
 ```bash
-go build -o lazyswap .           # build (gitignored binary); or `go run .`
-go test ./...                    # all tests
-go test ./internal/swap/         # single package
-go test -run TestQuote ./...     # filter by name
-go test -cover ./...             # coverage
-bash scripts/build-release.sh    # cross-compile tarballs → dist/ (CGO_ENABLED=0)
+# Run
+go run .                          # run from source (no binary)
+go build -o lazyswap .            # build binary (gitignored)
+
+# Test
+go test ./...                     # all tests
+go test ./internal/swap/          # single package
+go test -run TestQuote ./...      # filter by name
+go test -cover ./...              # with coverage
+
+# Release build (cross-compile → dist/)
+bash scripts/build-release.sh     # CGO_ENABLED=0; targets: linux-x64/arm64, darwin-x64/arm64
 ```
 
-## Architecture
+**Install from source:**
+```bash
+go install github.com/FernandoPazCavalcante/lazyswap@latest
+```
 
-Entry: `main.go`. **With args → `cli.Run`; with none → launches the TUI.**
+**CLI usage examples:**
+```bash
+lazyswap                          # launch TUI (no args)
+lazyswap swap 0.50 BNB USDT       # swap BNB → USDT
+lazyswap swap 5 BNB USDT --yes    # skip confirmation
+lazyswap wallets                  # list wallet addresses
+lazyswap config show              # print chain/slippage/default-wallet
+lazyswap help                     # full command reference
+```
 
-Layers: **TUI → services → DAO / blockchain**. All packages live under `internal/`:
+---
 
-- `internal/crypto` — AES-256-GCM + PBKDF2 (100k iters)
-- `internal/wallet` — wallet CRUD + SQLite DAO (`modernc.org/sqlite`, cgo-free)
-- `internal/chain` — `config.go` `CHAINS` map + contract ABIs; `DefaultKey = "bsc"`
-- `internal/dex`, `internal/swap`, `internal/thorchain` — quote/orchestrate/execute (EVM + BTC)
-- `internal/balance`, `internal/explorer` — balance fetch/format, explorer API
-- `internal/pass` — LazySwapPass (ERC-721) mint + validity/expiry reads, **on-chain only**
-  (no backend). Per-chain address in `chain.Config.PassAddress` (empty = feature inert;
-  deployed on `bsc_testnet` only — set `bsc`'s address after mainnet deploy). Surfaced as the
-  TUI "Lazyswap Pass" tab (6); one-click mint reuses the in-session decrypted key.
-- `internal/settings` — persisted chain/slippage/default-wallet, **shared by CLI and TUI**
-- `internal/paths` — filesystem SSOT; `internal/applog` — file logger
-- `internal/cli` — non-interactive commands; `internal/tui` — screens/panels/overlays/theme/keys
+## Entry point & architecture
 
-Most packages mirror a TS file (`// Mirrors src/...`, in `lazyswap-old/`). When changing
-behavior, keep parity with the Bun reference unless intentionally diverging.
+**`main.go`** — if `os.Args > 1` → `cli.Run()`; otherwise → launches the Bubble Tea TUI.
 
-## Critical Rules
+Layers: **TUI → Services → DAO / Blockchain**
 
-- **`internal/chain/config.go` `CHAINS` is the single source of truth** for RPC URLs, router
-  and token addresses. Never hardcode chain-specific values elsewhere.
-- **Outside `internal/cli`, never write to stdout/stderr** (`fmt.Print*`, `log`, `println`) —
-  it corrupts the TUI. Use `internal/applog` (writes `~/.lazyswap/lazyswap.log`, never panics).
-  The CLI prints to stdout/stderr on purpose; the TUI does not.
-- **Filesystem paths only via `internal/paths`.** Data dir `~/.lazyswap/`, override with
-  `LAZYSWAP_DATA_DIR`. `paths.Override` / `applog.SetPath` isolate tests; `LAZYSWAP_TEST=1`
-  routes the log to `/dev/null`.
-- Wallet/key handling stays in `internal/wallet` + `internal/crypto`; the private key is never
-  logged or printed in plaintext.
-- Never commit the compiled binary (`lazyswap` / `lazyswap-tui`), `dist/`, `*.db`, `*.log`, or `.claude/` (see `.gitignore`).
-- Release version is injected via `-ldflags "-X .../internal/cli.version=..."`; default `"dev"`.
-- Releases are driven by **semantic-release / Conventional Commits** (`.releaserc.json`): `master`
-  → `beta` prereleases, `stable` → releases. The release binary is named `lazyswap`.
+```
+main.go
+  ├── internal/cli        — non-interactive commands (swap, wallets, config, set password)
+  └── internal/tui        — Bubble Tea screens / panels / overlays / theme / keys
+        ├── internal/wallet     — wallet CRUD + SQLite DAO (modernc/sqlite, cgo-free)
+        ├── internal/swap       — quote + execute orchestration (EVM + BTC)
+        ├── internal/dex        — Uniswap V2 / PancakeSwap quote/swap
+        ├── internal/thorchain  — cross-chain BTC swap routing
+        ├── internal/balance    — balance fetch + formatting
+        ├── internal/explorer   — block explorer API
+        ├── internal/pass       — LazySwapPass ERC-721 mint/validity (on-chain only)
+        ├── internal/settings   — persisted chain/slippage/default-wallet (shared CLI+TUI)
+        ├── internal/crypto     — AES-256-GCM + PBKDF2 (100k iters) key encryption
+        ├── internal/chain      — CHAINS map + contract ABIs (SSOT for all chain config)
+        ├── internal/paths      — filesystem SSOT (~/.lazyswap/, LAZYSWAP_DATA_DIR)
+        └── internal/applog     — file logger (~/.lazyswap/lazyswap.log, never stdout)
+```
 
-## Testing
+---
 
-- Behavior + data only. **No tests on `View()` / layout / ASCII art** — they churn.
-- CLI env vars: `LAZYSWAP_PASSWORD` (skips prompt), `LAZYSWAP_DATA_DIR`.
-- `lazyswap set password` prints an `export LAZYSWAP_PASSWORD=…` line for the caller to `eval`
-  (a child process can't set the parent shell's env). It only emits the secret when stdout is
-  captured (not a TTY), refusing on a bare terminal to avoid leaking it. See `internal/cli/setpassword.go`.
+## Key directories
+
+| Path | Purpose |
+|---|---|
+| `main.go` | Entry point |
+| `internal/chain/config.go` | **CHAINS map** — single source of truth for RPC URLs, router/token addresses |
+| `internal/tui/` | Bubble Tea model, screens, panels, overlays, theme, keybindings |
+| `internal/cli/` | Non-interactive CLI commands |
+| `internal/wallet/` | Wallet CRUD + SQLite DAO |
+| `internal/crypto/` | AES-256-GCM + PBKDF2 encryption |
+| `internal/pass/` | LazySwapPass ERC-721 (deployed on `bsc_testnet` only) |
+| `internal/paths/` | Filesystem path resolution |
+| `internal/applog/` | File-based logger |
+| `scripts/build-release.sh` | Cross-compile release tarballs → `dist/` |
+| `.releaserc.json` | semantic-release config |
+
+---
+
+## Critical conventions
+
+### Chain config
+- **`internal/chain/config.go` `CHAINS` is the single source of truth.** Never hardcode chain-specific values (RPC URLs, router addresses, token addresses) anywhere else.
+- Supported chains: `ethereum`, `bsc`, `bsc_testnet`, `sepolia`. Default: `bsc`.
+- `OrderedKeys` controls stable display order (Go maps iterate randomly).
+
+### Logging / stdout
+- **Outside `internal/cli`, never write to stdout/stderr** (`fmt.Print*`, `log`, `println`) — it corrupts the Bubble Tea TUI.
+- Use `internal/applog` everywhere else. It writes to `~/.lazyswap/lazyswap.log` and never panics.
+- `LAZYSWAP_TEST=1` routes the log to `/dev/null`.
+
+### Filesystem paths
+- **All filesystem paths via `internal/paths` only.** Data dir: `~/.lazyswap/`; override with `LAZYSWAP_DATA_DIR`.
+- `paths.Override` + `applog.SetPath` are used to isolate tests.
+
+### Security
+- Private keys are handled exclusively in `internal/wallet` + `internal/crypto`. Never log or print a private key in plaintext.
+- `lazyswap set password` emits `export LAZYSWAP_PASSWORD=…` only when stdout is not a TTY (captured), to avoid terminal leakage.
+
+### Testing
+- Test behavior and data only. **Do not test `View()` / layout / ASCII art** — they churn.
+- Useful env vars in tests: `LAZYSWAP_PASSWORD` (skips prompt), `LAZYSWAP_DATA_DIR`, `LAZYSWAP_TEST=1`.
+
+### TS parity
+- Most packages mirror a TypeScript file in `lazyswap-old/` (noted as `// Mirrors src/...`). When changing behavior, keep parity with the Bun reference unless intentionally diverging.
+
+### Release
+- Version injected via `-ldflags "-X .../internal/cli.version=..."`. Default: `"dev"`.
+- **Conventional Commits** required — semantic-release derives versions from commit history.
+- `master` → `beta` prereleases; `stable` → full releases.
+- **Never commit:** compiled binary (`lazyswap`), `dist/`, `*.db`, `*.log`, `.claude/`.
+
+---
+
+## CI/CD
+
+GitHub Actions (`.github/workflows/release.yml`):
+1. Triggered on push to `master`.
+2. Runs `scripts/build-release.sh` → cross-compiled tarballs in `dist/`.
+3. Runs `npx semantic-release@24` → creates GitHub Release with tarballs + SHA256 checksums if releasable commits are present.
+
+---
+
+## Data & runtime
+
+- Data directory: `~/.lazyswap/` (`wallets.db`, `lazyswap.log`). Override: `LAZYSWAP_DATA_DIR`.
+- Connects at runtime to public EVM RPC endpoints (configured in `CHAINS`) and THORchain API.
+- No server, no backend, no container — pure local binary.
+
+---
+
+## LazySwapPass (ERC-721)
+
+`internal/pass` implements on-chain mint + validity/expiry reads for the LazySwapPass NFT. Surfaced as TUI tab 6 ("Lazyswap Pass"). Currently deployed on `bsc_testnet` only (`chain.Config.PassAddress`). Empty `PassAddress` = feature is inert on that chain.
