@@ -1,21 +1,24 @@
 # Infrastructure
 
-**Cloud & IaC**
-- No cloud provider (AWS/GCP/Azure) used. All repos are either local binaries, GitHub-hosted runners, or self-hosted bare-metal.
-- No IaC tooling (Terraform, CloudFormation, etc.).
+**Cloud & Hosting**
+- Cloudflare: Workers (lazyswap-site), Pages, DNS-01 TLS, Zero Trust tunnels (home-server)
+- GitHub: Actions runners (ubuntu-latest, ubuntu-slim), Releases for artifact distribution
 
-**Containerization & Orchestration**
-- Docker Compose (home-server, rinha-de-backend-2024-q1): multi-file stacks; resource caps enforced (rinha: ≤1.5 CPU, ≤550 MB RAM).
-- Kubernetes (flagsmith-charts): Helm charts for self-hosting; OpenShift also documented.
-- GitHub Actions runners (ubuntu-latest, ubuntu-slim): lazyswap, marketingskills, resume, flagsmith-charts.
+**Container & Orchestration**
+- Docker Compose (home-server, rinha-de-backend-2024-q1); Kubernetes target with Helm (flagsmith-charts)
+- kind cluster for chart testing (flagsmith-charts)
 
-**Managed Services & Key Infrastructure**
-- PostgreSQL (flagsmith-charts, rinha-de-backend-2024-q1 reference).
-- InfluxDB2 (flagsmith-charts dependency).
-- Cloudflare (home-server): DNS-01 TLS, Zero Trust tunnels, Zerotier VPN.
-- GitHub Pages (flagsmith-charts): Helm repo index hosting.
-- GitHub Releases (lazyswap, resume, flagsmith-charts): artifact distribution.
+**Managed Services**
+- Bitnami PostgreSQL, InfluxDB2 (flagsmith-charts dependencies)
+- Cloudflare Tunnels, Zerotier VPN (home-server)
 
-**Self-Hosted Services**
-- home-server: Caddy v2 (reverse proxy), Pi-hole v6 (DNS), Plex, qBittorrent, Radarr, Sonarr, Lidarr, Prowlarr, Jackett, Bazarr, Overseerr, FlareSolverr, Portainer, Watchtower, LibreSpeed, Calibre-Web-Automated, Shelfmark.
+**Local/Self-Hosted**
+- Bare-metal Linux (Arch Linux, home-server)
+- Pure local binaries (lazyswap); no cloud infra
+- Multi-chain smart contract deployment (BSC, Ethereum, Polygon, Arbitrum, Base; lazyswap-contracts)
 
+**IaC & Configuration**
+- Helm charts (flagsmith-charts)
+- Docker Compose YAML (home-server, rinha-de-backend-2024-q1)
+- Wrangler config (lazyswap-site)
+- foundry.toml (lazyswap-contracts)
