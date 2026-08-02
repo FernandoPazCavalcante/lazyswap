@@ -8,6 +8,8 @@ This repository is part of the **FernandoPazCavalcante's Org** organization. Sha
 
 Go rewrite of the original Bun/TypeScript app (reference: `lazyswap-old/`). Module: `github.com/FernandoPazCavalcante/lazyswap`. Requires **Go 1.26+**.
 
+> **Org-wide context** (CI/CD, infra, observability, tech stack, other repos) lives in [`.midnax/`](./.midnax/) — read `.midnax/overview.md` first, then the domain files.
+
 ---
 
 ## Commands
@@ -85,6 +87,7 @@ main.go
 | `internal/applog/` | File-based logger |
 | `scripts/build-release.sh` | Cross-compile release tarballs → `dist/` |
 | `.releaserc.json` | semantic-release config |
+| `.midnax/` | Machine-generated org-wide context (do not edit by hand) |
 
 ---
 
@@ -129,6 +132,8 @@ GitHub Actions (`.github/workflows/release.yml`):
 1. Triggered on push to `master`.
 2. Runs `scripts/build-release.sh` → cross-compiled tarballs in `dist/`.
 3. Runs `npx semantic-release@24` → creates GitHub Release with tarballs + SHA256 checksums if releasable commits are present.
+
+See also `.midnax/ci-cd.md` for org-wide CI/CD context.
 
 ---
 

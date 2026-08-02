@@ -1,17 +1,16 @@
 # Tech Stack
 
 **Backend**
-- Go 1.26+ (lazyswap): Bubble Tea (TUI), go-ethereum, btcd/btcutil, modernc.org/sqlite, charmbracelet/lipgloss+bubbles, go-bip39, go-qrcode; AES-256-GCM + PBKDF2 for key encryption.
-- Node.js 18+ (marketingskills, resume): Playwright (Chromium) for PDF rendering; zero-dependency CLI scripts.
-- Scala (rinha-de-backend-2024-q1): Gatling 3.10.3 (JDK 21) for load testing.
-- Bash/Shell (home-server, flagsmith-charts): Docker Compose orchestration, Helm templating.
+- Go 1.26+ (lazyswap): Bubble Tea (TUI), go-ethereum, btcd/btcutil, modernc.org/sqlite, charmbracelet/lipgloss+bubbles, go-bip39, go-qrcode
+- Solidity 0.8.24 (lazyswap-contracts): Foundry (forge/cast), forge-std, OpenZeppelin Contracts
 
 **Frontend**
-- HTML/CSS (resume): static resumes (EN + PT).
-- Markdown/YAML (marketingskills): Agent Skills content; Claude Code plugin marketplace.
+- TypeScript, React 18, Vite 6, Tailwind CSS v4, shadcn/ui (Radix UI), MUI v7, lucide-react, motion, react-router v7 (lazyswap-site)
+- Markdown/YAML content (marketingskills); Node.js 18+ CLI scripts (zero-dependency)
+- HTML/CSS (resume); Node.js + Playwright for PDF rendering
 
 **Infrastructure**
-- Docker Compose (home-server, rinha-de-backend-2024-q1): multi-file stacks; Caddy v2 (xcaddy with docker-proxy + Cloudflare DNS plugins), Pi-hole v6, Cloudflare Tunnels, Zerotier VPN.
-- Helm (flagsmith-charts): Kubernetes packaging; chart dependencies on Bitnami PostgreSQL, InfluxDB2.
-- PostgreSQL, Nginx (rinha-de-backend-2024-q1 reference implementation).
-
+- Helm (YAML/Go templates) with Bash tooling (flagsmith-charts)
+- Docker Compose (home-server, rinha-de-backend-2024-q1)
+- Cloudflare Workers (Wrangler v4) + static assets (lazyswap-site)
+- Bash/PowerShell scripts (rinha-de-backend-2024-q1 test runner)
