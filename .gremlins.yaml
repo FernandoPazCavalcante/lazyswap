@@ -1,0 +1,10 @@
+# Mutation-testing config. Thresholds are intentionally NOT set here:
+# nightly CI passes --threshold-efficacy 50; the PR job runs report-only.
+unleash:
+  workers: 0
+  output: "mutation-results.json"
+  exclude-files:
+    - "_test\\.go$"
+    - "internal/tui/"
+    - "e2e/"
+    - "^main\\.go$"

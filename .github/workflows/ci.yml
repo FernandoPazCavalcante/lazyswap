@@ -1,0 +1,75 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Coverage gate (>= 70% ex-TUI)
+        run: bash scripts/coverage-gate.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # Quote-only CLI e2e (public testnet RPC, no funds) + TUI smoke.
+      # The funded swap test self-skips: LAZYSWAP_E2E_MNEMONIC is not set here.
+      - run: LAZYSWAP_TEST=1 go test -tags e2e -race -count=1 ./e2e/...
+
+  mutation-report:
+    # Report-only on PRs: never blocks, posts efficacy to the job summary.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.5.0
+      - run: LAZYSWAP_TEST=1 gremlins unleash --output=mutation-results.json || true
+      - name: Summarize
+        run: |
+          if [ -f mutation-results.json ]; then
+            jq -r '"Mutation efficacy: \(.efficacy // "n/a")% — killed \(.killed // 0), lived \(.lived // 0), not covered \(.not_covered // 0)"' \
+              mutation-results.json >> "$GITHUB_STEP_SUMMARY" || true
+          else
+            echo "No mutation results produced" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-results
+          path: mutation-results.json
+          if-no-files-found: ignore

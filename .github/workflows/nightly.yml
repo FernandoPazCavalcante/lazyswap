@@ -1,0 +1,46 @@
+name: nightly
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  mutation:
+    # Blocking: fails when mutation efficacy drops below 50%.
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.5.0
+      - run: LAZYSWAP_TEST=1 gremlins unleash --threshold-efficacy 50 --output=mutation-results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-results
+          path: mutation-results.json
+          if-no-files-found: ignore
+
+  funded-e2e:
+    # Executes a real tiny swap on bsc_testnet. Runs only when the funded
+    # wallet secret exists (secrets are not readable in job-level `if:`,
+    # hence the env + guard-step pattern).
+    runs-on: ubuntu-latest
+    env:
+      LAZYSWAP_E2E_MNEMONIC: ${{ secrets.LAZYSWAP_E2E_MNEMONIC }}
+    steps:
+      - id: guard
+        run: echo "run=$([ -n "$LAZYSWAP_E2E_MNEMONIC" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.run == 'true'
+      - uses: actions/setup-go@v5
+        if: steps.guard.outputs.run == 'true'
+        with:
+          go-version-file: go.mod
+          cache: true
+      - if: steps.guard.outputs.run == 'true'
+        run: LAZYSWAP_TEST=1 go test -tags e2e -race -count=1 -run TestFundedSwap ./e2e/...
