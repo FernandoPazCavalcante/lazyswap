@@ -15,6 +15,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
@@ -28,6 +29,8 @@ func runSwap(args []string) int {
 	chainFlag := fs.String("chain", "", "chain key (default: configured)")
 	slipFlag := fs.Float64("slippage", -1, "slippage percent (default: configured)")
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
+	noSafety := fs.Bool("no-safety", false, "skip the pre-swap token risk check")
+	safetyBlock := fs.Bool("safety-block", false, "refuse to swap when the risk check comes back HIGH")
 
 	// stdlib flag stops at the first positional; loop so flags may appear before,
 	// after, or between the three positionals (e.g. `swap 0.50 BNB USDT --chain bsc`).
@@ -119,6 +122,16 @@ func runSwap(args []string) int {
 		return die("quote: %v", err)
 	}
 	printQuote(c, w.Address, q)
+
+	// Risk-check the token being bought. Advisory by default; --safety-block
+	// turns a HIGH verdict into a refusal.
+	if !*noSafety && safety.ShouldCheck(c, toTok) {
+		rep := safety.New().Check(ctx, chainKey, toTok.Address)
+		fmt.Printf("\n%s\n", safety.FormatReport(rep))
+		if *safetyBlock && rep.Level == safety.LevelHigh {
+			return die("refusing to swap: token risk is HIGH (drop --safety-block to override)")
+		}
+	}
 
 	// Confirm.
 	if !*yes {

@@ -12,9 +12,19 @@ import (
 
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/pass"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 )
+
+// flagDescs flattens risk flags into their descriptions for error text.
+func flagDescs(fs []safety.Flag) []string {
+	out := make([]string, len(fs))
+	for i, f := range fs {
+		out[i] = f.Desc
+	}
+	return out
+}
 
 // rpcTimeout bounds every handler that touches the chain, mirroring the CLI.
 const rpcTimeout = 2 * time.Minute
@@ -206,26 +216,42 @@ func (s *server) resolveSwap(in swapIn) (key string, from, to swap.TokenInfo, us
 	return
 }
 
-func (s *server) swapQuote(ctx context.Context, req *sdk.CallToolRequest, in swapIn) (*sdk.CallToolResult, swap.FlowQuote, error) {
+// swapQuoteOut is a FlowQuote plus the token risk verdict, so agents see the
+// safety picture without an extra round-trip.
+type swapQuoteOut struct {
+	swap.FlowQuote
+	Safety *safety.Report `json:"safety,omitempty" jsonschema:"risk report for the token being bought; absent for native/stablecoin buys"`
+}
+
+// riskReport assesses the destination token; nil when no check applies.
+func (s *server) riskReport(ctx context.Context, key string, to swap.TokenInfo) *safety.Report {
+	if !safety.ShouldCheck(chain.Get(key), to) {
+		return nil
+	}
+	rep := s.safety.Check(ctx, key, to.Address)
+	return &rep
+}
+
+func (s *server) swapQuote(ctx context.Context, req *sdk.CallToolRequest, in swapIn) (*sdk.CallToolResult, swapQuoteOut, error) {
 	key, from, to, usd, slip, err := s.resolveSwap(in)
 	if err != nil {
-		return nil, swap.FlowQuote{}, err
+		return nil, swapQuoteOut{}, err
 	}
 	w, err := s.pickWallet(in.Wallet)
 	if err != nil {
-		return nil, swap.FlowQuote{}, err
+		return nil, swapQuoteOut{}, err
 	}
 	f, err := s.flow(key)
 	if err != nil {
-		return nil, swap.FlowQuote{}, err
+		return nil, swapQuoteOut{}, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 	q, err := f.Quote(ctx, from, to, usd, slip, w.Address)
 	if err != nil {
-		return nil, swap.FlowQuote{}, err
+		return nil, swapQuoteOut{}, err
 	}
-	return nil, q, nil
+	return nil, swapQuoteOut{FlowQuote: q, Safety: s.riskReport(ctx, key, to)}, nil
 }
 
 func (s *server) swapExecute(ctx context.Context, req *sdk.CallToolRequest, in swapIn) (*sdk.CallToolResult, swap.FlowResult, error) {
@@ -240,6 +266,12 @@ func (s *server) swapExecute(ctx context.Context, req *sdk.CallToolRequest, in s
 	}
 	if !s.tradingChainAllowed(key) {
 		return nil, swap.FlowResult{}, fmt.Errorf("refused: trading on %q is not in the --chain allowlist %v", key, s.opts.Chains)
+	}
+	// No human squints at a warning here, so a HIGH risk verdict is a refusal
+	// unless the server was started with --allow-risky. Unknown (testnets, API
+	// outage) stays advisory — refusing would brick testnet trading.
+	if rep := s.riskReport(ctx, key, to); rep != nil && rep.Level == safety.LevelHigh && !s.opts.AllowRisky {
+		return nil, swap.FlowResult{}, fmt.Errorf("refused: token risk is HIGH (%s) — restart with --allow-risky to override", strings.Join(flagDescs(rep.Flags), "; "))
 	}
 	w, err := s.unlockWallet(in.Wallet)
 	if err != nil {

@@ -20,6 +20,7 @@ import (
 
 	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/theme"
 )
@@ -47,10 +48,17 @@ type ExecuteRequestMsg struct {
 
 // ─── Input messages (sent by parent) ─────────────────────────────────────────
 
-// QuoteResultMsg carries the result of a QuoteRequestMsg.
+// QuoteResultMsg carries the result of a QuoteRequestMsg. SafetyPending tells
+// the overlay a SafetyResultMsg will follow (render "checking…" meanwhile).
 type QuoteResultMsg struct {
-	Quote swap.FlowQuote
-	Err   error
+	Quote         swap.FlowQuote
+	Err           error
+	SafetyPending bool
+}
+
+// SafetyResultMsg carries the async token risk report for the preview step.
+type SafetyResultMsg struct {
+	Report safety.Report
 }
 
 // ExecutionResultMsg carries the result of an ExecuteRequestMsg.
@@ -116,6 +124,9 @@ type Model struct {
 	quoteErr string
 	execMsg  string // status banner during stepExecuting
 	execRes  *swap.FlowResult
+
+	risk        *safety.Report
+	riskPending bool
 }
 
 // New builds the overlay. balances should be the current wallet's tokens;
@@ -163,7 +174,15 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.quote = &msg.Quote
 			m.quoteErr = ""
 		}
+		m.risk = nil
+		m.riskPending = msg.Err == nil && msg.SafetyPending
 		m.step = stepPreview
+		return m, nil
+
+	case SafetyResultMsg:
+		r := msg.Report
+		m.risk = &r
+		m.riskPending = false
 		return m, nil
 
 	case ExecutionResultMsg:
@@ -356,7 +375,29 @@ func (m Model) previewBody() string {
 	if q.NeedsApproval {
 		lines = append(lines, theme.Dim().Render("Note: ERC-20 approval required — will be sent automatically."))
 	}
+	if line := m.riskLine(); line != "" {
+		lines = append(lines, "", line)
+	}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+// riskLine renders the safety verdict for the preview: empty when no check
+// applies, dim while pending or unknown, error-styled on HIGH risk.
+func (m Model) riskLine() string {
+	if m.riskPending {
+		return theme.Dim().Render("safety: checking token risk…")
+	}
+	if m.risk == nil {
+		return ""
+	}
+	s := safety.FormatReport(*m.risk)
+	if m.risk.Unknown {
+		return theme.Dim().Render(s)
+	}
+	if m.risk.Level == safety.LevelHigh {
+		return theme.Error().Render(s)
+	}
+	return theme.Text().Render(s)
 }
 
 func (m Model) doneBody() string {

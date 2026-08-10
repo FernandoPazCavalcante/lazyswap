@@ -71,11 +71,14 @@ swap flags:
   --chain <key>        override the default chain for this swap
   --slippage <pct>     override the default slippage for this swap
   --yes                skip the y/N confirmation
+  --no-safety          skip the pre-swap token risk check
+  --safety-block       refuse the swap when token risk is HIGH
 
 mcp flags:
   --allow-trading      register the swap_execute / buy_pass tools (default: read-only)
   --max-usd <usd>      per-swap USD cap, required with --allow-trading
   --chain <keys>       comma-separated chain allowlist for trading tools
+  --allow-risky        let swap_execute buy HIGH-risk tokens (default: refuse)
 
 Example:
   lazyswap swap 0.50 BNB USDT     # $0.50 of BNB into USDT on the default chain

@@ -8,6 +8,7 @@ import (
 
 	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/paths"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
@@ -25,7 +26,20 @@ func newTestServer(t *testing.T, opts Options) *server {
 		t.Fatalf("open dao: %v", err)
 	}
 	t.Cleanup(func() { dao.Close() })
-	return &server{dao: dao, opts: opts, flows: map[string]*swap.Flow{}, bals: map[string]*balance.Service{}}
+	return &server{
+		dao:    dao,
+		opts:   opts,
+		safety: safety.NewWith(stubChecker{}),
+		flows:  map[string]*swap.Flow{},
+		bals:   map[string]*balance.Service{},
+	}
+}
+
+// stubChecker returns a fixed report without any network.
+type stubChecker struct{ rep safety.Report }
+
+func (c stubChecker) Check(ctx context.Context, chainKey, tokenAddr string) (safety.Report, error) {
+	return c.rep, nil
 }
 
 func TestRunRejectsBadOptions(t *testing.T) {
@@ -86,6 +100,29 @@ func TestSwapExecuteRefusesOverCap(t *testing.T) {
 	_, _, err := s.swapExecute(context.Background(), nil, swapIn{USD: 50, From: "BNB", To: "USDT"})
 	if err == nil || !strings.Contains(err.Error(), "--max-usd") {
 		t.Fatalf("expected cap refusal, got %v", err)
+	}
+}
+
+func TestSwapExecuteRefusesHighRisk(t *testing.T) {
+	s := newTestServer(t, Options{AllowTrading: true, MaxUSD: 100})
+	s.safety = safety.NewWith(stubChecker{rep: safety.Report{
+		Level:    safety.LevelHigh,
+		Honeypot: true,
+		Flags:    []safety.Flag{{Key: "honeypot", Desc: "honeypot: selling is blocked", Severity: safety.LevelHigh}},
+	}})
+	// CAKE is a real non-stablecoin token on bsc, so the risk check applies.
+	// Must refuse BEFORE any wallet unlock or RPC dial.
+	_, _, err := s.swapExecute(context.Background(), nil, swapIn{USD: 5, From: "BNB", To: "CAKE"})
+	if err == nil || !strings.Contains(err.Error(), "HIGH") {
+		t.Fatalf("expected high-risk refusal, got %v", err)
+	}
+
+	// --allow-risky lifts the gate: execution proceeds past the risk check and
+	// fails later on the empty test wallet instead.
+	s.opts.AllowRisky = true
+	_, _, err = s.swapExecute(context.Background(), nil, swapIn{USD: 5, From: "BNB", To: "CAKE"})
+	if err != nil && strings.Contains(err.Error(), "HIGH") {
+		t.Fatalf("risk gate must be lifted with AllowRisky, got %v", err)
 	}
 }
 

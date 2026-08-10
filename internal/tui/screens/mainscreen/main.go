@@ -18,6 +18,7 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
 	passpkg "github.com/FernandoPazCavalcante/lazyswap/internal/pass"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/importoverlay"
@@ -63,11 +64,12 @@ const (
 
 // Model owns the main-screen state machine.
 type Model struct {
-	dao     *walletpkg.DAO
-	svc     *walletpkg.Service
-	balSvc  *balance.Service
-	flowSvc *swap.Flow
-	passSvc *passpkg.Service
+	dao       *walletpkg.DAO
+	svc       *walletpkg.Service
+	balSvc    *balance.Service
+	flowSvc   *swap.Flow
+	passSvc   *passpkg.Service
+	safetySvc *safety.Service
 
 	panel    walletpanel.Model
 	tokens   tokenspanel.Model
@@ -124,6 +126,7 @@ func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, pa
 		balSvc:        balSvc,
 		flowSvc:       flowSvc,
 		passSvc:       passSvc,
+		safetySvc:     safety.New(),
 		panel:         walletpanel.New(),
 		tokens:        tokenspanel.New(),
 		settings:      settingspanel.New(st.Slippage, chainKey, c.Name),
@@ -247,6 +250,7 @@ type swapQuoteMsg struct {
 	quote swap.FlowQuote
 	err   error
 }
+type safetyMsg struct{ report safety.Report }
 type swapExecMsg struct{ result swap.FlowResult }
 type passStatusMsg struct {
 	status passpkg.Status
@@ -289,6 +293,13 @@ func quoteSwapCmd(f *swap.Flow, from, to swap.TokenInfo, usd, walletAddr string,
 		defer cancel()
 		q, err := f.Quote(ctx, from, to, usd, slippage, walletAddr)
 		return swapQuoteMsg{quote: q, err: err}
+	}
+}
+
+// safetyCmd runs the (cached, fail-closed) token risk check off the UI loop.
+func safetyCmd(svc *safety.Service, chainKey, tokenAddr string) tea.Cmd {
+	return func() tea.Msg {
+		return safetyMsg{report: svc.Check(context.Background(), chainKey, tokenAddr)}
 	}
 }
 
@@ -485,7 +496,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if m.current == nil {
 			return m, nil
 		}
-		return m, quoteSwapCmd(m.flowSvc, msg.From, msg.To, msg.USDAmount, m.current.Address, m.slippage)
+		quoteCmd := quoteSwapCmd(m.flowSvc, msg.From, msg.To, msg.USDAmount, m.current.Address, m.slippage)
+		if safety.ShouldCheck(chain.Get(m.chainKey), msg.To) {
+			return m, tea.Batch(quoteCmd, safetyCmd(m.safetySvc, m.chainKey, msg.To.Address))
+		}
+		return m, quoteCmd
 
 	case swapoverlay.ExecuteRequestMsg:
 		if m.current == nil {
@@ -496,7 +511,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, executeSwapCmd(m.flowSvc, m.current.PrivateKey, msg.From, msg.To, msg.USDAmount, m.slippage)
 
 	case swapQuoteMsg:
-		m.swap, _ = m.swap.Update(swapoverlay.QuoteResultMsg{Quote: msg.quote, Err: msg.err})
+		pending := msg.err == nil && safety.ShouldCheck(chain.Get(m.chainKey), msg.quote.ToToken)
+		m.swap, _ = m.swap.Update(swapoverlay.QuoteResultMsg{Quote: msg.quote, Err: msg.err, SafetyPending: pending})
+		return m, nil
+
+	case safetyMsg:
+		m.swap, _ = m.swap.Update(swapoverlay.SafetyResultMsg{Report: msg.report})
 		return m, nil
 
 	case swapExecMsg:

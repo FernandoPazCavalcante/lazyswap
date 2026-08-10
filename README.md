@@ -22,6 +22,10 @@ PancakeSwap), plus cross-chain BTC swaps via THORchain.
   PBKDF2-derived key (100k iterations) and never stored or logged in plaintext.
 - **Vim-style TUI + scriptable CLI.** A fast, keyboard-driven terminal UI, plus
   a non-interactive CLI for one-shot swaps in scripts and pipelines.
+- **Pre-swap safety check.** Before you sign, the token you're buying is
+  risk-checked (honeypot, buy/sell tax, owner powers) via GoPlus and the
+  verdict is shown inline — advisory by default, `--safety-block` to refuse
+  HIGH-risk swaps. Fail-closed: an unreachable risk API warns, never passes.
 - **Multi-chain EVM.** Ethereum and BSC today, with chain config in one place —
   RPC URLs, routers and token addresses are never hardcoded elsewhere.
 

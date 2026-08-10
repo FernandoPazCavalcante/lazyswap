@@ -19,6 +19,7 @@ import (
 
 	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
@@ -29,6 +30,7 @@ type Options struct {
 	AllowTrading bool     // register swap_execute / buy_pass
 	MaxUSD       float64  // per-swap USD cap; required > 0 when AllowTrading
 	Chains       []string // allowlist for trading tools; empty = any configured chain
+	AllowRisky   bool     // let swap_execute buy HIGH-risk tokens (default: refuse)
 	Version      string
 }
 
@@ -36,9 +38,10 @@ type Options struct {
 // services are dialed lazily per chain and cached; the mutex guards the maps
 // (the underlying ethclient is safe for concurrent use).
 type server struct {
-	dao  *wallet.DAO
-	opts Options
-	pw   string // LAZYSWAP_PASSWORD; verified at startup when trading is enabled
+	dao    *wallet.DAO
+	opts   Options
+	pw     string // LAZYSWAP_PASSWORD; verified at startup when trading is enabled
+	safety *safety.Service
 
 	mu    sync.Mutex
 	flows map[string]*swap.Flow
@@ -64,11 +67,12 @@ func Run(ctx context.Context, opts Options) error {
 	defer dao.Close()
 
 	s := &server{
-		dao:   dao,
-		opts:  opts,
-		pw:    os.Getenv("LAZYSWAP_PASSWORD"),
-		flows: map[string]*swap.Flow{},
-		bals:  map[string]*balance.Service{},
+		dao:    dao,
+		opts:   opts,
+		pw:     os.Getenv("LAZYSWAP_PASSWORD"),
+		safety: safety.New(),
+		flows:  map[string]*swap.Flow{},
+		bals:   map[string]*balance.Service{},
 	}
 	if opts.AllowTrading {
 		// The password comes from the environment only — never from a tool
