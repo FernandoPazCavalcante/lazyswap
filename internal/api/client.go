@@ -91,7 +91,7 @@ func (c *Client) post(ctx context.Context, path string, body, out any) error {
 	if err != nil {
 		return fmt.Errorf("lazyswap api unreachable: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return err

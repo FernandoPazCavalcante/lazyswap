@@ -22,8 +22,80 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
 
+// swapArgs holds the parsed `swap` flags and positionals.
+type swapArgs struct {
+	usd, fromSym, toSym string
+	wallet, chain       string
+	slippage            float64
+	yes, noSafety       bool
+	safetyBlock         bool
+	apiMode, directMode bool
+	quoteOnly           bool
+}
+
+// swapEnv is the resolved settings/chain/token context for one swap.
+type swapEnv struct {
+	st       settings.Settings
+	chainKey string
+	slippage float64
+	c        chain.Config
+	fromTok  swap.TokenInfo
+	toTok    swap.TokenInfo
+}
+
 // runSwap implements: lazyswap swap <usd> <FROM> <TO> [flags]
 func runSwap(args []string) int {
+	a, err := parseSwapArgs(args)
+	if err != nil {
+		return die("%v", err)
+	}
+
+	dao, err := wallet.Open()
+	if err != nil {
+		return die("open database: %v", err)
+	}
+	defer func() { _ = dao.Close() }()
+
+	env, err := resolveSwapEnv(dao, a)
+	if err != nil {
+		return die("%v", err)
+	}
+	w, err := unlockSwapWallet(dao, a.wallet, env.st.DefaultWallet)
+	if err != nil {
+		return die("%v", err)
+	}
+
+	flow, err := swap.NewFlow(env.chainKey)
+	if err != nil {
+		return die("connect to %s: %v", env.c.Name, err)
+	}
+	defer flow.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	mode := resolveSwapMode(env.st, a)
+	apiClient, mode, err := authAPI(ctx, w, mode, a.apiMode)
+	if err != nil {
+		return die("%v", err)
+	}
+	q, mode, err := fetchQuote(ctx, apiClient, flow, env, a, w.Address, mode)
+	if err != nil {
+		return die("%v", err)
+	}
+	printQuote(env.c, w.Address, q)
+
+	if err := runSafetyCheck(ctx, a, env); err != nil {
+		return die("%v", err)
+	}
+	if a.quoteOnly {
+		return 0
+	}
+	return confirmAndExecute(ctx, apiClient, flow, env, a, w, mode)
+}
+
+// parseSwapArgs parses the swap flags and the three positionals into a struct.
+func parseSwapArgs(args []string) (swapArgs, error) {
 	fs := flag.NewFlagSet("swap", flag.ContinueOnError)
 	fs.SetOutput(io.Discard) // we print our own errors
 	walletFlag := fs.String("wallet", "", "wallet address to swap from")
@@ -34,6 +106,7 @@ func runSwap(args []string) int {
 	safetyBlock := fs.Bool("safety-block", false, "refuse to swap when the risk check comes back HIGH")
 	apiMode := fs.Bool("api", false, "route via the lazyswap API (OpenOcean best rates; needs a LazySwap Pass)")
 	directMode := fs.Bool("direct", false, "route directly via the on-chain V2 router (no fee, no auth)")
+	quoteOnly := fs.Bool("quote-only", false, "print the quote (and risk check) then exit without executing")
 
 	// stdlib flag stops at the first positional; loop so flags may appear before,
 	// after, or between the three positionals (e.g. `swap 0.50 BNB USDT --chain bsc`).
@@ -41,7 +114,7 @@ func runSwap(args []string) int {
 	rest := args
 	for {
 		if err := fs.Parse(rest); err != nil {
-			return die("%v (try: lazyswap swap 0.50 BNB USDT)", err)
+			return swapArgs{}, fmt.Errorf("%v (try: lazyswap swap 0.50 BNB USDT)", err)
 		}
 		rest = fs.Args()
 		if len(rest) == 0 {
@@ -51,136 +124,160 @@ func runSwap(args []string) int {
 		rest = rest[1:]
 	}
 	if len(pos) != 3 {
-		return die("usage: lazyswap swap <usd> <FROM> <TO>  (e.g. swap 0.50 BNB USDT)")
+		return swapArgs{}, errors.New("usage: lazyswap swap <usd> <FROM> <TO>  (e.g. swap 0.50 BNB USDT)")
 	}
-	usd, fromSym, toSym := pos[0], pos[1], pos[2]
-	if v, err := strconv.ParseFloat(usd, 64); err != nil || v <= 0 {
-		return die("amount must be a positive USD number, got %q", usd)
+	if v, err := strconv.ParseFloat(pos[0], 64); err != nil || v <= 0 {
+		return swapArgs{}, fmt.Errorf("amount must be a positive USD number, got %q", pos[0])
 	}
 	if *apiMode && *directMode {
-		return die("--api and --direct are mutually exclusive")
+		return swapArgs{}, errors.New("--api and --direct are mutually exclusive")
 	}
+	return swapArgs{
+		usd: pos[0], fromSym: pos[1], toSym: pos[2],
+		wallet: *walletFlag, chain: *chainFlag, slippage: *slipFlag,
+		yes: *yes, noSafety: *noSafety, safetyBlock: *safetyBlock,
+		apiMode: *apiMode, directMode: *directMode, quoteOnly: *quoteOnly,
+	}, nil
+}
 
-	dao, err := wallet.Open()
-	if err != nil {
-		return die("open database: %v", err)
-	}
-	defer dao.Close()
-
+// resolveSwapEnv loads settings and resolves the effective chain, slippage
+// (flag > setting), and both tokens.
+func resolveSwapEnv(dao *wallet.DAO, a swapArgs) (swapEnv, error) {
 	st, err := settings.Load(dao)
 	if err != nil {
-		return die("load settings: %v", err)
+		return swapEnv{}, fmt.Errorf("load settings: %w", err)
 	}
-
-	// Resolve effective chain / slippage (flag > setting).
 	chainKey := st.ChainKey
-	if *chainFlag != "" {
-		if !chain.Has(*chainFlag) {
-			return die("unknown chain %q", *chainFlag)
+	if a.chain != "" {
+		if !chain.Has(a.chain) {
+			return swapEnv{}, fmt.Errorf("unknown chain %q", a.chain)
 		}
-		chainKey = *chainFlag
+		chainKey = a.chain
 	}
 	slippage := st.Slippage
-	if *slipFlag >= 0 {
-		slippage = *slipFlag
+	if a.slippage >= 0 {
+		slippage = a.slippage
 	}
 	c := chain.Get(chainKey)
 
-	fromTok, err := swap.ResolveToken(c, fromSym)
+	fromTok, err := swap.ResolveToken(c, a.fromSym)
 	if err != nil {
-		return die("%v", err)
+		return swapEnv{}, err
 	}
-	toTok, err := swap.ResolveToken(c, toSym)
+	toTok, err := swap.ResolveToken(c, a.toSym)
 	if err != nil {
-		return die("%v", err)
+		return swapEnv{}, err
 	}
+	return swapEnv{st: st, chainKey: chainKey, slippage: slippage, c: c, fromTok: fromTok, toTok: toTok}, nil
+}
 
-	// Unlock and resolve the wallet.
+// unlockSwapWallet prompts for the password, unlocks the store, and picks the
+// wallet to swap from (explicit flag > configured default > only wallet).
+func unlockSwapWallet(dao *wallet.DAO, explicitAddr, defaultAddr string) (wallet.Wallet, error) {
 	pw, err := readPassword()
 	if err != nil {
-		return die("%v", err)
+		return wallet.Wallet{}, err
 	}
 	svc, err := wallet.Unlock(dao, pw)
 	if err != nil {
-		return die("%v", err)
+		return wallet.Wallet{}, err
 	}
 	ws, err := wallet.NewService(dao, svc).FetchAll()
 	if err != nil {
-		return die("load wallets: %v", err)
+		return wallet.Wallet{}, fmt.Errorf("load wallets: %w", err)
 	}
-	w, err := wallet.Pick(ws, *walletFlag, st.DefaultWallet)
-	if err != nil {
-		return die("%v", err)
-	}
+	return wallet.Pick(ws, explicitAddr, defaultAddr)
+}
 
-	// Resolve the swap route: flag > persisted setting > direct.
+// resolveSwapMode resolves the swap route: flag > persisted setting > direct.
+func resolveSwapMode(st settings.Settings, a swapArgs) string {
 	mode := settings.SwapModeDirect
 	if st.SwapMode != "" {
 		mode = st.SwapMode
 	}
-	if *apiMode {
+	if a.apiMode {
 		mode = settings.SwapModeAPI
 	}
-	if *directMode {
+	if a.directMode {
 		mode = settings.SwapModeDirect
 	}
+	return mode
+}
 
-	// Quote.
-	flow, err := swap.NewFlow(chainKey)
-	if err != nil {
-		return die("connect to %s: %v", c.Name, err)
+// authAPI SIWE-authenticates with the unlocked key for API-mode swaps
+// (stateless — nothing is stored on disk). When the API was chosen by setting
+// (not the --api flag) and is unavailable, it falls back to direct.
+func authAPI(ctx context.Context, w wallet.Wallet, mode string, explicit bool) (*api.Client, string, error) {
+	if mode != settings.SwapModeAPI {
+		return nil, mode, nil
 	}
-	defer flow.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	// API mode: SIWE-authenticate with the unlocked key (stateless — nothing
-	// is stored on disk), then quote via the backend. When the API was chosen
-	// by setting (not the --api flag) and is unavailable, fall back to direct.
-	var apiClient *api.Client
-	if mode == settings.SwapModeAPI {
-		apiClient = api.New("")
-		if _, err := apiClient.Authenticate(ctx, w.Address, w.PrivateKey); err != nil {
-			if *apiMode {
-				return die("api auth: %v", err)
-			}
-			fmt.Fprintf(os.Stderr, "lazyswap: API unavailable (%v) — falling back to direct\n", err)
-			mode = settings.SwapModeDirect
-			apiClient = nil
+	apiClient := api.New("")
+	if _, err := apiClient.Authenticate(ctx, w.Address, w.PrivateKey); err != nil {
+		if explicit {
+			return nil, mode, fmt.Errorf("api auth: %w", err)
 		}
+		fmt.Fprintf(os.Stderr, "lazyswap: API unavailable (%v) — falling back to direct\n", err)
+		return nil, settings.SwapModeDirect, nil
 	}
+	return apiClient, mode, nil
+}
 
+// fetchQuote quotes via the backend in API mode (falling back to direct unless
+// --api was explicit) or via the on-chain router. Returns the effective mode.
+func fetchQuote(
+	ctx context.Context,
+	apiClient *api.Client,
+	flow *swap.Flow,
+	env swapEnv,
+	a swapArgs,
+	walletAddr, mode string,
+) (swap.FlowQuote, string, error) {
 	var q swap.FlowQuote
+	var err error
 	if mode == settings.SwapModeAPI {
-		q, err = api.QuoteFlow(ctx, apiClient, flow, c, fromTok, toTok, usd, slippage)
-		if err != nil && !*apiMode {
+		q, err = api.QuoteFlow(ctx, apiClient, flow, env.c, env.fromTok, env.toTok, a.usd, env.slippage)
+		if err != nil && !a.apiMode {
 			fmt.Fprintf(os.Stderr, "lazyswap: API quote failed (%v) — falling back to direct\n", err)
 			mode = settings.SwapModeDirect
 		} else if err != nil {
-			return die("quote: %v", err)
+			return q, mode, fmt.Errorf("quote: %w", err)
 		}
 	}
 	if mode == settings.SwapModeDirect {
-		q, err = flow.Quote(ctx, fromTok, toTok, usd, slippage, w.Address)
+		q, err = flow.Quote(ctx, env.fromTok, env.toTok, a.usd, env.slippage, walletAddr)
 		if err != nil {
-			return die("quote: %v", err)
+			return q, mode, fmt.Errorf("quote: %w", err)
 		}
 	}
-	printQuote(c, w.Address, q)
+	return q, mode, nil
+}
 
-	// Risk-check the token being bought. Advisory by default; --safety-block
-	// turns a HIGH verdict into a refusal.
-	if !*noSafety && safety.ShouldCheck(c, toTok) {
-		rep := safety.New().Check(ctx, chainKey, toTok.Address)
-		fmt.Printf("\n%s\n", safety.FormatReport(rep))
-		if *safetyBlock && rep.Level == safety.LevelHigh {
-			return die("refusing to swap: token risk is HIGH (drop --safety-block to override)")
-		}
+// runSafetyCheck risk-checks the token being bought. Advisory by default;
+// --safety-block turns a HIGH verdict into a refusal.
+func runSafetyCheck(ctx context.Context, a swapArgs, env swapEnv) error {
+	if a.noSafety || !safety.ShouldCheck(env.c, env.toTok) {
+		return nil
 	}
+	rep := safety.New().Check(ctx, env.chainKey, env.toTok.Address)
+	fmt.Printf("\n%s\n", safety.FormatReport(rep))
+	if a.safetyBlock && rep.Level == safety.LevelHigh {
+		return errors.New("refusing to swap: token risk is HIGH (drop --safety-block to override)")
+	}
+	return nil
+}
 
-	// Confirm.
-	if !*yes {
+// confirmAndExecute prompts for confirmation (unless --yes), executes the swap
+// on the resolved route, and prints the resulting tx hash + explorer URL.
+func confirmAndExecute(
+	ctx context.Context,
+	apiClient *api.Client,
+	flow *swap.Flow,
+	env swapEnv,
+	a swapArgs,
+	w wallet.Wallet,
+	mode string,
+) int {
+	if !a.yes {
 		ok, err := confirm()
 		if err != nil {
 			return die("%v", err)
@@ -191,40 +288,44 @@ func runSwap(args []string) int {
 		}
 	}
 
-	// Execute.
 	var res swap.FlowResult
 	if mode == settings.SwapModeAPI {
-		res = api.ExecuteFlow(ctx, apiClient, flow, c, w.PrivateKey, fromTok, toTok, usd, slippage)
+		res = api.ExecuteFlow(ctx, apiClient, flow, env.c, w.PrivateKey, env.fromTok, env.toTok, a.usd, env.slippage)
 	} else {
-		res = flow.Execute(ctx, w.PrivateKey, fromTok, toTok, usd, slippage)
+		res = flow.Execute(ctx, w.PrivateKey, env.fromTok, env.toTok, a.usd, env.slippage)
 	}
 	if !res.Success {
 		return die("swap failed: %s", res.Err)
 	}
 	fmt.Printf("\n✓ swapped — tx %s\n", res.TxHash)
-	if url := txURL(c, res.TxHash); url != "" {
+	if url := txURL(env.c, res.TxHash); url != "" {
 		fmt.Printf("  %s\n", url)
 	}
 	return 0
 }
 
 func printQuote(c chain.Config, walletAddr string, q swap.FlowQuote) {
+	fprintQuote(os.Stdout, c, walletAddr, q)
+}
+
+// fprintQuote renders the quote to w (separated from printQuote for golden tests).
+func fprintQuote(w io.Writer, c chain.Config, walletAddr string, q swap.FlowQuote) {
 	route := "direct (on-chain V2 router)"
 	if q.Mode == "api" {
 		route = "api (OpenOcean best rate, MEV protected)"
 	}
-	fmt.Printf("Swap on %s using %s\n", c.Name, walletAddr)
-	fmt.Printf("  route     %s\n", route)
+	_, _ = fmt.Fprintf(w, "Swap on %s using %s\n", c.Name, walletAddr)
+	_, _ = fmt.Fprintf(w, "  route     %s\n", route)
 	if q.PriceImpact != "" {
-		fmt.Printf("  impact    %s\n", q.PriceImpact)
+		_, _ = fmt.Fprintf(w, "  impact    %s\n", q.PriceImpact)
 	}
-	fmt.Printf("  spend     %s of %s (%s %s) %s\n",
+	_, _ = fmt.Fprintf(w, "  spend     %s of %s (%s %s) %s\n",
 		q.USDAmountFormatted, q.FromToken.Symbol, q.NetFromTokenAmount, q.FromToken.Symbol, q.FromTokenPriceLine)
-	fmt.Printf("  receive   ~%s %s\n", q.EstimatedOutput, q.ToToken.Symbol)
-	fmt.Printf("  min recv  %s %s (slippage %.2f%%)\n", q.MinOutput, q.ToToken.Symbol, q.Slippage)
-	fmt.Printf("  fee       %s %s (%.2f%%)\n", q.FeeAmount, q.FromToken.Symbol, q.FeePercent)
+	_, _ = fmt.Fprintf(w, "  receive   ~%s %s\n", q.EstimatedOutput, q.ToToken.Symbol)
+	_, _ = fmt.Fprintf(w, "  min recv  %s %s (slippage %.2f%%)\n", q.MinOutput, q.ToToken.Symbol, q.Slippage)
+	_, _ = fmt.Fprintf(w, "  fee       %s %s (%.2f%%)\n", q.FeeAmount, q.FromToken.Symbol, q.FeePercent)
 	if q.NeedsApproval {
-		fmt.Printf("  note      token approval will be sent first\n")
+		_, _ = fmt.Fprintf(w, "  note      token approval will be sent first\n")
 	}
 }
 

@@ -128,7 +128,7 @@ func TestConfirmMatchEmitsSuccessCmd(t *testing.T) {
 	}
 
 	// Feed the internal message back and verify the public LoginSuccessMsg fires.
-	m, cmd = m.Update(internal)
+	_, cmd = m.Update(internal)
 	if cmd == nil {
 		t.Fatalf("expected re-emit cmd")
 	}

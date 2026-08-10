@@ -146,8 +146,8 @@ func flipFirstHex(s string) string {
 	}
 	first := s[0]
 	var swapped byte
-	switch {
-	case first == '0':
+	switch first {
+	case '0':
 		swapped = '1'
 	default:
 		swapped = '0'

@@ -60,26 +60,9 @@ func (f *Flow) ExecuteRawTx(
 		}
 	}
 
-	value, ok := new(big.Int).SetString(zeroIfEmpty(raw.Value), 10)
-	if !ok {
-		return "", "", fmt.Errorf("bad tx value %q", raw.Value)
-	}
-	gasPrice, ok := new(big.Int).SetString(zeroIfEmpty(raw.GasPrice), 10)
-	if !ok || gasPrice.Sign() == 0 {
-		if gasPrice, err = f.client.SuggestGasPrice(ctx); err != nil {
-			return "", "", fmt.Errorf("gas price: %w", err)
-		}
-	}
-	gasLimit, err := strconv.ParseUint(zeroIfEmpty(raw.GasLimit), 10, 64)
+	p, err := f.parseRawTx(ctx, raw)
 	if err != nil {
-		return "", "", fmt.Errorf("bad gas limit %q", raw.GasLimit)
-	}
-	// Aggregator gas estimates run tight; pad 25% — unused gas is refunded.
-	gasLimit += gasLimit / 4
-
-	data, err := hex.DecodeString(strings.TrimPrefix(raw.Data, "0x"))
-	if err != nil {
-		return "", "", fmt.Errorf("bad calldata: %w", err)
+		return "", "", err
 	}
 	nonce, err := f.client.PendingNonceAt(ctx, from)
 	if err != nil {
@@ -90,10 +73,10 @@ func (f *Flow) ExecuteRawTx(
 	tx := types.NewTx(&types.LegacyTx{
 		Nonce:    nonce,
 		To:       &to,
-		Value:    value,
-		Gas:      gasLimit,
-		GasPrice: gasPrice,
-		Data:     data,
+		Value:    p.value,
+		Gas:      p.gasLimit,
+		GasPrice: p.gasPrice,
+		Data:     p.data,
 	})
 	signed, err := types.SignTx(tx, types.LatestSignerForChainID(chainID), pk)
 	if err != nil {
@@ -110,6 +93,43 @@ func (f *Flow) ExecuteRawTx(
 		return receipt.TxHash.Hex(), "", errors.New("transaction reverted")
 	}
 	return receipt.TxHash.Hex(), strconv.FormatUint(receipt.GasUsed, 10), nil
+}
+
+// rawTxParams holds RawTx's numeric and calldata fields decoded into typed
+// values ready for a LegacyTx.
+type rawTxParams struct {
+	value    *big.Int
+	gasPrice *big.Int
+	gasLimit uint64
+	data     []byte
+}
+
+// parseRawTx decodes RawTx's string fields, falling back to the RPC's
+// suggested gas price when none is set.
+func (f *Flow) parseRawTx(ctx context.Context, raw RawTx) (rawTxParams, error) {
+	value, ok := new(big.Int).SetString(zeroIfEmpty(raw.Value), 10)
+	if !ok {
+		return rawTxParams{}, fmt.Errorf("bad tx value %q", raw.Value)
+	}
+	gasPrice, ok := new(big.Int).SetString(zeroIfEmpty(raw.GasPrice), 10)
+	if !ok || gasPrice.Sign() == 0 {
+		var err error
+		if gasPrice, err = f.client.SuggestGasPrice(ctx); err != nil {
+			return rawTxParams{}, fmt.Errorf("gas price: %w", err)
+		}
+	}
+	gasLimit, err := strconv.ParseUint(zeroIfEmpty(raw.GasLimit), 10, 64)
+	if err != nil {
+		return rawTxParams{}, fmt.Errorf("bad gas limit %q", raw.GasLimit)
+	}
+	// Aggregator gas estimates run tight; pad 25% — unused gas is refunded.
+	gasLimit += gasLimit / 4
+
+	data, err := hex.DecodeString(strings.TrimPrefix(raw.Data, "0x"))
+	if err != nil {
+		return rawTxParams{}, fmt.Errorf("bad calldata: %w", err)
+	}
+	return rawTxParams{value: value, gasPrice: gasPrice, gasLimit: gasLimit, data: data}, nil
 }
 
 // ensureAllowance approves spender for exactly amount when the current

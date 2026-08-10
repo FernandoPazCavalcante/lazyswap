@@ -84,7 +84,7 @@ func write(lv level, msg, extra string) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, _ = f.WriteString(line)
 }
 

@@ -36,8 +36,8 @@ func (ListDelegate) Render(w io.Writer, m list.Model, index int, item list.Item)
 		title = di.Title()
 	}
 	if index == m.Index() {
-		fmt.Fprint(w, SelectedRow().Render("> "+title))
+		_, _ = fmt.Fprint(w, SelectedRow().Render("> "+title))
 		return
 	}
-	fmt.Fprint(w, NormalRow().Render("  "+title))
+	_, _ = fmt.Fprint(w, NormalRow().Render("  "+title))
 }

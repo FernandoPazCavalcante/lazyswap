@@ -1,0 +1,30 @@
+version: "2"
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - cyclop
+    - funlen
+    - revive
+  settings:
+    cyclop:
+      max-complexity: 15
+    funlen:
+      lines: 80
+      statements: -1
+      ignore-comments: true
+    revive:
+      rules:
+        - name: file-length-limit
+          arguments:
+            - max: 500
+              skipComments: false
+              skipBlankLines: false
+  exclusions:
+    rules:
+      # Table tests get long; complexity/length limits stay on prod code.
+      # File-length still applies to tests.
+      - path: '(.+)_test\.go'
+        linters:
+          - cyclop
+          - funlen

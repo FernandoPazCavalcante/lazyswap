@@ -81,7 +81,7 @@ func (c *Client) DiscoverTokens(ctx context.Context, walletAddress, apiKey, chai
 		applog.Errorf("explorer: network error — %v", err)
 		return nil, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		applog.Errorf("explorer: HTTP %d from %s", resp.StatusCode, cfg.ExplorerAPIURL)

@@ -17,7 +17,7 @@ func serve(t *testing.T, status int, body string) *GoPlus {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
-		fmt.Fprint(w, body)
+		_, _ = fmt.Fprint(w, body)
 	}))
 	t.Cleanup(srv.Close)
 	return &GoPlus{Base: srv.URL}
@@ -112,7 +112,7 @@ func TestServiceCaches(t *testing.T) {
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		fmt.Fprint(w, goplusBody(`"is_honeypot":"0"`))
+		_, _ = fmt.Fprint(w, goplusBody(`"is_honeypot":"0"`))
 	}))
 	t.Cleanup(srv.Close)
 	svc := &Service{checker: &GoPlus{Base: srv.URL}, cache: map[string]cached{}}

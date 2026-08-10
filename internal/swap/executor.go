@@ -130,7 +130,7 @@ func (e *Executor) ExecuteSwap(
 	want, _ := strconv.ParseFloat(inputAmount, 64)
 	if cur < want {
 		return ExecutionResult{}, fmt.Errorf(
-			"insufficient allowance. Current: %s, Required: %s. Please approve token first.",
+			"insufficient allowance (current %s, required %s) — approve the token first",
 			current, inputAmount,
 		)
 	}

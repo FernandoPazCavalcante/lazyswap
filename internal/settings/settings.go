@@ -54,29 +54,58 @@ func Load(dao *wallet.DAO) (Settings, error) {
 	if dao == nil {
 		return s, nil
 	}
-	if v, ok, err := dao.GetConfig(keySlippage); err != nil {
+	if err := loadSlippage(dao, &s); err != nil {
 		return s, err
-	} else if ok {
-		if f, e := strconv.ParseFloat(v, 64); e == nil && f >= 0 && f <= 100 {
-			s.Slippage = f
-		}
 	}
-	if v, ok, err := dao.GetConfig(keyChain); err != nil {
+	if err := loadChain(dao, &s); err != nil {
 		return s, err
-	} else if ok && chain.Has(v) {
-		s.ChainKey = v
 	}
-	if v, ok, err := dao.GetConfig(keyDefaultWallet); err != nil {
+	if err := loadDefaultWallet(dao, &s); err != nil {
 		return s, err
-	} else if ok {
-		s.DefaultWallet = v
 	}
-	if v, ok, err := dao.GetConfig(keySwapMode); err != nil {
+	if err := loadSwapMode(dao, &s); err != nil {
 		return s, err
-	} else if ok && (v == SwapModeDirect || v == SwapModeAPI) {
-		s.SwapMode = v
 	}
 	return s, nil
+}
+
+// loadSlippage applies a stored slippage to s when present and valid (0–100).
+func loadSlippage(dao *wallet.DAO, s *Settings) error {
+	v, ok, err := dao.GetConfig(keySlippage)
+	if err != nil || !ok {
+		return err
+	}
+	if f, e := strconv.ParseFloat(v, 64); e == nil && f >= 0 && f <= 100 {
+		s.Slippage = f
+	}
+	return nil
+}
+
+// loadChain applies a stored chain key to s when present and known.
+func loadChain(dao *wallet.DAO, s *Settings) error {
+	v, ok, err := dao.GetConfig(keyChain)
+	if err == nil && ok && chain.Has(v) {
+		s.ChainKey = v
+	}
+	return err
+}
+
+// loadDefaultWallet applies a stored default wallet address to s when present.
+func loadDefaultWallet(dao *wallet.DAO, s *Settings) error {
+	v, ok, err := dao.GetConfig(keyDefaultWallet)
+	if err == nil && ok {
+		s.DefaultWallet = v
+	}
+	return err
+}
+
+// loadSwapMode applies a stored swap mode to s when present and valid.
+func loadSwapMode(dao *wallet.DAO, s *Settings) error {
+	v, ok, err := dao.GetConfig(keySwapMode)
+	if err == nil && ok && (v == SwapModeDirect || v == SwapModeAPI) {
+		s.SwapMode = v
+	}
+	return err
 }
 
 // SetSlippage persists the slippage tolerance (validated 0–100).

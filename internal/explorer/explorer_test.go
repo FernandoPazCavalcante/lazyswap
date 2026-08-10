@@ -63,7 +63,7 @@ func TestDiscoverTokensNoTransactionsFoundSilent(t *testing.T) {
 	defer cleanup()
 
 	got, err := c.DiscoverTokens(context.Background(), "0xWallet", "key", "bsc")
-	if err != nil || got != nil && len(got) != 0 {
+	if err != nil || len(got) != 0 {
 		t.Fatalf("expected ([] / nil, nil), got (%+v, %v)", got, err)
 	}
 }

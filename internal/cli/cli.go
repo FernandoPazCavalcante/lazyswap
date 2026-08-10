@@ -52,7 +52,7 @@ func die(format string, a ...any) int {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprint(w, `lazyswap — vim-style EVM wallet (TUI + CLI)
+	_, _ = fmt.Fprint(w, `lazyswap — vim-style EVM wallet (TUI + CLI)
 
 Usage:
   lazyswap                              launch the TUI
@@ -76,6 +76,7 @@ swap flags:
   --safety-block       refuse the swap when token risk is HIGH
   --api                route via the lazyswap API (best rates; needs a LazySwap Pass)
   --direct             route directly via the on-chain V2 router (no fee, no auth)
+  --quote-only         print the quote (and risk check) then exit without executing
 
 mcp flags:
   --allow-trading      register the swap_execute / buy_pass tools (default: read-only)

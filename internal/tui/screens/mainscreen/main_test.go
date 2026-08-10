@@ -129,9 +129,7 @@ func TestImportCancelExitsOverlay(t *testing.T) {
 
 func TestRefreshedMsgPopulatesWallets(t *testing.T) {
 	m := newModel(t)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	cmd = nil // unused
-	_ = cmd
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
 
 	// Run a create directly via the service so we have data, then feed a
 	// refreshedMsg into the model and assert it absorbs it.

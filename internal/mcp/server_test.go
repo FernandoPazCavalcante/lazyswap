@@ -26,7 +26,7 @@ func newTestServer(t *testing.T, opts Options) *server {
 	if err != nil {
 		t.Fatalf("open dao: %v", err)
 	}
-	t.Cleanup(func() { dao.Close() })
+	t.Cleanup(func() { _ = dao.Close() })
 	return &server{
 		dao:    dao,
 		opts:   opts,

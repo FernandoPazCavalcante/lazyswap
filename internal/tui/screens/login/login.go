@@ -254,7 +254,7 @@ func deriveAndVerifyCmd(dao *wallet.DAO, pw string) tea.Cmd {
 		svc, err := wallet.Unlock(dao, pw)
 		if err != nil {
 			if errors.Is(err, wallet.ErrInvalidPassword) {
-				return loginErrMsg{errors.New("Invalid password. Try again.")}
+				return loginErrMsg{errors.New("invalid password — try again")}
 			}
 			return loginErrMsg{err}
 		}

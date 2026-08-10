@@ -58,16 +58,16 @@ func TestAuthenticateHappyPath(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/siwe/challenge":
-			fmt.Fprint(w, `{"success":true,"data":{"nonce":"n1","message":"sign me\nNonce: n1"}}`)
+			_, _ = fmt.Fprint(w, `{"success":true,"data":{"nonce":"n1","message":"sign me\nNonce: n1"}}`)
 		case "/api/v1/siwe/verify":
 			var body map[string]string
-			json.NewDecoder(r.Body).Decode(&body)
+			_ = json.NewDecoder(r.Body).Decode(&body)
 			if body["wallet"] == "" || !strings.HasPrefix(body["signature"], "0x") || body["message"] == "" {
 				w.WriteHeader(400)
-				fmt.Fprint(w, `{"success":false,"error":{"code":"BAD_REQUEST","message":"missing"}}`)
+				_, _ = fmt.Fprint(w, `{"success":false,"error":{"code":"BAD_REQUEST","message":"missing"}}`)
 				return
 			}
-			fmt.Fprint(w, `{"success":true,"data":{"jwt":"jwt-1","wallet":"0xabc","tier":1,"tierName":"Trader","volume30d":1234.5}}`)
+			_, _ = fmt.Fprint(w, `{"success":true,"data":{"jwt":"jwt-1","wallet":"0xabc","tier":1,"tierName":"Trader","volume30d":1234.5}}`)
 		default:
 			w.WriteHeader(404)
 		}
@@ -87,11 +87,11 @@ func TestAuthenticateHappyPath(t *testing.T) {
 func TestBackendErrorCodeSurfaces(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/siwe/challenge" {
-			fmt.Fprint(w, `{"success":true,"data":{"nonce":"n1","message":"m\nNonce: n1"}}`)
+			_, _ = fmt.Fprint(w, `{"success":true,"data":{"nonce":"n1","message":"m\nNonce: n1"}}`)
 			return
 		}
 		w.WriteHeader(403)
-		fmt.Fprint(w, `{"success":false,"error":{"code":"NO_PASS","message":"No valid LazySwapPass NFT found"}}`)
+		_, _ = fmt.Fprint(w, `{"success":false,"error":{"code":"NO_PASS","message":"No valid LazySwapPass NFT found"}}`)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -111,10 +111,10 @@ func TestSwapQuoteSendsBearer(t *testing.T) {
 		}
 		if r.Header.Get("Authorization") != "Bearer jwt-test" {
 			w.WriteHeader(401)
-			fmt.Fprint(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"Missing JWT"}}`)
+			_, _ = fmt.Fprint(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"Missing JWT"}}`)
 			return
 		}
-		fmt.Fprint(w, `{"success":true,"data":{"quote":{"inToken":{"address":"a","symbol":"BNB","decimals":18},"outToken":{"address":"b","symbol":"USDT","decimals":18},"inAmount":"1000000000000000000","outAmount":"600000000000000000000","estimatedGas":"210000","minOutAmount":"597000000000000000000","price_impact":"0.01%"},"feePercent":1,"wallet":"0xabc"}}`)
+		_, _ = fmt.Fprint(w, `{"success":true,"data":{"quote":{"inToken":{"address":"a","symbol":"BNB","decimals":18},"outToken":{"address":"b","symbol":"USDT","decimals":18},"inAmount":"1000000000000000000","outAmount":"600000000000000000000","estimatedGas":"210000","minOutAmount":"597000000000000000000","price_impact":"0.01%"},"feePercent":1,"wallet":"0xabc"}}`)
 	}))
 	t.Cleanup(srv.Close)
 

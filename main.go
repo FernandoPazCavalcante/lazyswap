@@ -25,7 +25,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "open dao: %v\n", err)
 		os.Exit(1)
 	}
-	defer dao.Close()
+	defer func() { _ = dao.Close() }()
 
 	root, err := tui.NewRoot(dao, "")
 	if err != nil {

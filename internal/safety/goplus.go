@@ -76,7 +76,7 @@ func (g *GoPlus) Check(ctx context.Context, chainKey, tokenAddr string) (Report,
 	if err != nil {
 		return Report{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return Report{}, fmt.Errorf("goplus: HTTP %d", resp.StatusCode)
 	}

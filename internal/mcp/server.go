@@ -66,7 +66,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	defer dao.Close()
+	defer func() { _ = dao.Close() }()
 
 	s := &server{
 		dao:    dao,

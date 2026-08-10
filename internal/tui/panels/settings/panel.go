@@ -100,24 +100,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	if m.editing {
-		switch k.Type {
-		case tea.KeyEnter:
-			m.editing = false
-			m.input.Blur()
-			v, err := strconv.ParseFloat(strings.TrimSpace(m.input.Value()), 64)
-			if err != nil || v < 0 || v > 100 {
-				return m, nil // reject invalid; keep the prior value
-			}
-			m.slippage = v
-			return m, func() tea.Msg { return SlippageChangedMsg{Value: v} }
-		case tea.KeyEsc:
-			m.editing = false
-			m.input.Blur()
-			return m, nil
-		}
-		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(msg)
-		return m, cmd
+		return m.handleEditingKey(k)
 	}
 
 	switch k.String() {
@@ -145,6 +128,29 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// handleEditingKey drives the slippage editor: Enter commits (rejecting invalid
+// values), ESC cancels, anything else feeds the text input.
+func (m Model) handleEditingKey(k tea.KeyMsg) (Model, tea.Cmd) {
+	switch k.Type {
+	case tea.KeyEnter:
+		m.editing = false
+		m.input.Blur()
+		v, err := strconv.ParseFloat(strings.TrimSpace(m.input.Value()), 64)
+		if err != nil || v < 0 || v > 100 {
+			return m, nil // reject invalid; keep the prior value
+		}
+		m.slippage = v
+		return m, func() tea.Msg { return SlippageChangedMsg{Value: v} }
+	case tea.KeyEsc:
+		m.editing = false
+		m.input.Blur()
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(k)
+	return m, cmd
 }
 
 // View renders the bordered settings list.
