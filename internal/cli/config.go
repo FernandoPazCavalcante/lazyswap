@@ -32,9 +32,14 @@ func runConfig(args []string) int {
 		if walletAddr == "" {
 			walletAddr = "(unset — uses the only wallet, or pass --wallet)"
 		}
-		fmt.Printf("chain     %s (%s)\n", st.ChainKey, chain.Get(st.ChainKey).Name)
-		fmt.Printf("slippage  %s%%\n", strconv.FormatFloat(st.Slippage, 'f', -1, 64))
-		fmt.Printf("wallet    %s\n", walletAddr)
+		mode := st.SwapMode
+		if mode == "" {
+			mode = "direct (default)"
+		}
+		fmt.Printf("chain      %s (%s)\n", st.ChainKey, chain.Get(st.ChainKey).Name)
+		fmt.Printf("slippage   %s%%\n", strconv.FormatFloat(st.Slippage, 'f', -1, 64))
+		fmt.Printf("wallet     %s\n", walletAddr)
+		fmt.Printf("swap mode  %s\n", mode)
 		return 0
 
 	case "set-wallet":
@@ -73,6 +78,16 @@ func runConfig(args []string) int {
 			return die("%v", err)
 		}
 		fmt.Printf("default slippage set to %s%%\n", args[1])
+		return 0
+
+	case "set-swap-mode":
+		if len(args) != 2 {
+			return die("usage: lazyswap config set-swap-mode <direct|api>")
+		}
+		if err := settings.SetSwapMode(dao, args[1]); err != nil {
+			return die("%v", err)
+		}
+		fmt.Printf("swap mode set to %s\n", args[1])
 		return 0
 
 	default:

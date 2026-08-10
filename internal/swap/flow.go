@@ -50,6 +50,11 @@ type FlowQuote struct {
 	FeeAmount          string  `json:"feeAmount"`          // formatted, e.g. "0.000125"
 	NetFromTokenAmount string  `json:"netFromTokenAmount"` // gross - fee, formatted
 
+	// Mode is "direct" (on-chain V2 router) or "api" (backend/OpenOcean route).
+	// Empty means direct (pre-hybrid quotes).
+	Mode        string `json:"mode,omitempty"`
+	PriceImpact string `json:"priceImpact,omitempty"` // API mode only, e.g. "0.12%"
+
 	// THORchain-specific fields, set when IsThorchain is true (EVM → BTC).
 	IsThorchain          bool   `json:"isThorchain"`
 	ThorEstimatedSeconds int    `json:"thorEstimatedSeconds,omitempty"` // settlement estimate in seconds

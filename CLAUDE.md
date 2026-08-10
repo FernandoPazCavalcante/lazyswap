@@ -58,6 +58,7 @@ main.go
   ├── internal/cli        — non-interactive commands (swap, wallets, config, set password, mcp)
   ├── internal/mcp        — MCP stdio server for AI agents (delegates to the same services; never prints)
   ├── internal/safety     — pre-swap token risk check (GoPlus; fail-closed, cached; CLI+TUI+MCP)
+  ├── internal/api        — lazyswap backend client: SIWE auth (JWT in memory only) + OpenOcean swap route
   └── internal/tui        — Bubble Tea screens / panels / overlays / theme / keys
         ├── internal/wallet     — wallet CRUD + SQLite DAO (modernc/sqlite, cgo-free)
         ├── internal/swap       — quote + execute orchestration (EVM + BTC)
@@ -85,6 +86,7 @@ main.go
 | `internal/cli/` | Non-interactive CLI commands |
 | `internal/mcp/` | MCP stdio server — read-only tools by default; `swap_execute`/`buy_pass` only with `--allow-trading` + `--max-usd` cap, password via `LAZYSWAP_PASSWORD` env only |
 | `internal/safety/` | Pre-swap token risk check (GoPlus). Fail-closed: missing data/API failure → "unknown", never "safe". Testnets are always unknown (GoPlus has no coverage) |
+| `internal/api/` | Backend client for hybrid swap. SIWE JWT lives in memory only; swap tx is signed/broadcast locally (`swap.Flow.ExecuteRawTx`). API route needs `chain.Config.OpenOceanKey` (mainnets only); every front-end falls back to direct when the API is unavailable |
 | `internal/wallet/` | Wallet CRUD + SQLite DAO |
 | `internal/crypto/` | AES-256-GCM + PBKDF2 encryption |
 | `internal/pass/` | LazySwapPass ERC-721 (deployed on `bsc_testnet` only) |

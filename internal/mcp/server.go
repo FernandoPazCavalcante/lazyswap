@@ -17,6 +17,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	apiclient "github.com/FernandoPazCavalcante/lazyswap/internal/api"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
@@ -42,6 +43,7 @@ type server struct {
 	opts   Options
 	pw     string // LAZYSWAP_PASSWORD; verified at startup when trading is enabled
 	safety *safety.Service
+	api    *apiclient.Client
 
 	mu    sync.Mutex
 	flows map[string]*swap.Flow
@@ -71,6 +73,7 @@ func Run(ctx context.Context, opts Options) error {
 		opts:   opts,
 		pw:     os.Getenv("LAZYSWAP_PASSWORD"),
 		safety: safety.New(),
+		api:    apiclient.New(""),
 		flows:  map[string]*swap.Flow{},
 		bals:   map[string]*balance.Service{},
 	}
@@ -109,6 +112,45 @@ func (s *server) chainKey(explicit string) (string, error) {
 // tradingChainAllowed reports whether trading tools may act on the chain.
 func (s *server) tradingChainAllowed(key string) bool {
 	return len(s.opts.Chains) == 0 || slices.Contains(s.opts.Chains, key)
+}
+
+// swapMode resolves the route: explicit argument > persisted setting > direct.
+func (s *server) swapMode(explicit string) (string, error) {
+	switch explicit {
+	case settings.SwapModeDirect, settings.SwapModeAPI:
+		return explicit, nil
+	case "":
+	default:
+		return "", fmt.Errorf(`mode must be "direct" or "api", got %q`, explicit)
+	}
+	st, err := settings.Load(s.dao)
+	if err != nil {
+		return "", err
+	}
+	if st.SwapMode != "" {
+		return st.SwapMode, nil
+	}
+	return settings.SwapModeDirect, nil
+}
+
+// apiAuthed returns the shared API client, running SIWE with the wallet's key
+// on first use. Signing needs the decrypted key, so API mode is only available
+// when trading is enabled (LAZYSWAP_PASSWORD present).
+func (s *server) apiAuthed(ctx context.Context, walletHint string) (*apiclient.Client, error) {
+	if s.api.Authenticated() {
+		return s.api, nil
+	}
+	if !s.opts.AllowTrading {
+		return nil, errors.New("api mode needs --allow-trading: SIWE auth signs with the wallet key")
+	}
+	w, err := s.unlockWallet(walletHint)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.api.Authenticate(ctx, w.Address, w.PrivateKey); err != nil {
+		return nil, err
+	}
+	return s.api, nil
 }
 
 // slippage resolves the effective slippage: explicit (>0) > configured default.

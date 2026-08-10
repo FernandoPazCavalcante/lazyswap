@@ -61,6 +61,7 @@ Usage:
   lazyswap config set-wallet <address>  set the default wallet
   lazyswap config set-chain <key>       set the default chain
   lazyswap config set-slippage <pct>    set the default slippage
+  lazyswap config set-swap-mode <mode>  set the swap route: direct | api
   lazyswap wallets                      list wallet addresses
   lazyswap set password                 print an export line; use: eval "$(lazyswap set password)"
   lazyswap mcp                          serve the MCP server for AI agents (stdio)
@@ -73,6 +74,8 @@ swap flags:
   --yes                skip the y/N confirmation
   --no-safety          skip the pre-swap token risk check
   --safety-block       refuse the swap when token risk is HIGH
+  --api                route via the lazyswap API (best rates; needs a LazySwap Pass)
+  --direct             route directly via the on-chain V2 router (no fee, no auth)
 
 mcp flags:
   --allow-trading      register the swap_execute / buy_pass tools (default: read-only)

@@ -28,6 +28,11 @@ PancakeSwap), plus cross-chain BTC swaps via THORchain.
   HIGH-risk swaps. Fail-closed: an unreachable risk API warns, never passes.
 - **Multi-chain EVM.** Ethereum and BSC today, with chain config in one place —
   RPC URLs, routers and token addresses are never hardcoded elsewhere.
+- **Two swap routes, one UI.** *Direct* (default): straight to the on-chain V2
+  router — free, no account. *API*: routed through the lazyswap backend for
+  OpenOcean best rates across 500+ DEXs with MEV protection (1% fee, needs a
+  LazySwap Pass). The tx is always signed locally and broadcast via your own
+  RPC; if the API is unreachable the app falls back to direct automatically.
 
 ## Usage
 
@@ -40,6 +45,8 @@ lazyswap                          # launch the Vim-style TUI (first run creates 
 
 lazyswap swap 0.50 BNB USDT       # swap $0.50 worth of BNB into USDT
 lazyswap swap 5 BNB USDT --yes    # skip the y/N confirmation (handy in scripts)
+lazyswap swap 5 BNB USDT --api    # route via the API (OpenOcean best rate; needs a Pass)
+lazyswap config set-swap-mode api # make the API route the default
 lazyswap wallets                  # list wallet addresses
 lazyswap config show              # print current chain / slippage / default wallet
 lazyswap mcp                      # serve the MCP server for AI agents (stdio)

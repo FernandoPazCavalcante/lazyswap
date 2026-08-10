@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	apiclient "github.com/FernandoPazCavalcante/lazyswap/internal/api"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/paths"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
@@ -30,6 +31,7 @@ func newTestServer(t *testing.T, opts Options) *server {
 		dao:    dao,
 		opts:   opts,
 		safety: safety.NewWith(stubChecker{}),
+		api:    apiclient.New("http://127.0.0.1:1"), // unreachable; tests never hit it
 		flows:  map[string]*swap.Flow{},
 		bals:   map[string]*balance.Service{},
 	}
@@ -100,6 +102,29 @@ func TestSwapExecuteRefusesOverCap(t *testing.T) {
 	_, _, err := s.swapExecute(context.Background(), nil, swapIn{USD: 50, From: "BNB", To: "USDT"})
 	if err == nil || !strings.Contains(err.Error(), "--max-usd") {
 		t.Fatalf("expected cap refusal, got %v", err)
+	}
+}
+
+func TestSwapModeValidation(t *testing.T) {
+	s := newTestServer(t, Options{})
+	if _, err := s.swapMode("bogus"); err == nil {
+		t.Fatal("expected error for unknown mode")
+	}
+	if m, err := s.swapMode(""); err != nil || m != "direct" {
+		t.Fatalf("default mode = %q err %v, want direct", m, err)
+	}
+	if m, err := s.swapMode("api"); err != nil || m != "api" {
+		t.Fatalf("explicit mode = %q err %v, want api", m, err)
+	}
+}
+
+func TestAPIRouteNeedsTrading(t *testing.T) {
+	// SIWE signing needs the decrypted key — without --allow-trading the API
+	// route must refuse, not silently skip auth.
+	s := newTestServer(t, Options{})
+	_, err := s.apiAuthed(context.Background(), "")
+	if err == nil || !strings.Contains(err.Error(), "--allow-trading") {
+		t.Fatalf("expected --allow-trading refusal, got %v", err)
 	}
 }
 

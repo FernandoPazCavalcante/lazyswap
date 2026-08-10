@@ -10,6 +10,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	apiclient "github.com/FernandoPazCavalcante/lazyswap/internal/api"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/pass"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
@@ -191,6 +192,7 @@ type swapIn struct {
 	Slippage float64 `json:"slippage,omitempty" jsonschema:"slippage percent; omit for the configured default"`
 	Wallet   string  `json:"wallet,omitempty" jsonschema:"wallet address (default: configured default wallet)"`
 	Chain    string  `json:"chain,omitempty" jsonschema:"chain key (default: configured chain)"`
+	Mode     string  `json:"mode,omitempty" jsonschema:"swap route: direct (on-chain V2 router, no fee) or api (OpenOcean best rate, 1% fee, needs LazySwap Pass); default: configured"`
 }
 
 // resolveSwap maps a swapIn to everything a quote or execute needs.
@@ -237,6 +239,10 @@ func (s *server) swapQuote(ctx context.Context, req *sdk.CallToolRequest, in swa
 	if err != nil {
 		return nil, swapQuoteOut{}, err
 	}
+	mode, err := s.swapMode(in.Mode)
+	if err != nil {
+		return nil, swapQuoteOut{}, err
+	}
 	w, err := s.pickWallet(in.Wallet)
 	if err != nil {
 		return nil, swapQuoteOut{}, err
@@ -247,9 +253,23 @@ func (s *server) swapQuote(ctx context.Context, req *sdk.CallToolRequest, in swa
 	}
 	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
-	q, err := f.Quote(ctx, from, to, usd, slip, w.Address)
-	if err != nil {
-		return nil, swapQuoteOut{}, err
+
+	var q swap.FlowQuote
+	if mode == settings.SwapModeAPI {
+		ac, err := s.apiAuthed(ctx, in.Wallet)
+		if err != nil {
+			return nil, swapQuoteOut{}, err
+		}
+		q, err = apiclient.QuoteFlow(ctx, ac, f, chain.Get(key), from, to, usd, slip)
+		if err != nil {
+			return nil, swapQuoteOut{}, err
+		}
+	} else {
+		q, err = f.Quote(ctx, from, to, usd, slip, w.Address)
+		if err != nil {
+			return nil, swapQuoteOut{}, err
+		}
+		q.Mode = settings.SwapModeDirect
 	}
 	return nil, swapQuoteOut{FlowQuote: q, Safety: s.riskReport(ctx, key, to)}, nil
 }
@@ -273,6 +293,10 @@ func (s *server) swapExecute(ctx context.Context, req *sdk.CallToolRequest, in s
 	if rep := s.riskReport(ctx, key, to); rep != nil && rep.Level == safety.LevelHigh && !s.opts.AllowRisky {
 		return nil, swap.FlowResult{}, fmt.Errorf("refused: token risk is HIGH (%s) — restart with --allow-risky to override", strings.Join(flagDescs(rep.Flags), "; "))
 	}
+	mode, err := s.swapMode(in.Mode)
+	if err != nil {
+		return nil, swap.FlowResult{}, err
+	}
 	w, err := s.unlockWallet(in.Wallet)
 	if err != nil {
 		return nil, swap.FlowResult{}, err
@@ -283,7 +307,17 @@ func (s *server) swapExecute(ctx context.Context, req *sdk.CallToolRequest, in s
 	}
 	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
-	res := f.Execute(ctx, w.PrivateKey, from, to, usd, slip)
+
+	var res swap.FlowResult
+	if mode == settings.SwapModeAPI {
+		ac, err := s.apiAuthed(ctx, in.Wallet)
+		if err != nil {
+			return nil, swap.FlowResult{}, err
+		}
+		res = apiclient.ExecuteFlow(ctx, ac, f, chain.Get(key), w.PrivateKey, from, to, usd, slip)
+	} else {
+		res = f.Execute(ctx, w.PrivateKey, from, to, usd, slip)
+	}
 	if !res.Success {
 		return nil, swap.FlowResult{}, fmt.Errorf("swap failed: %s", res.Err)
 	}

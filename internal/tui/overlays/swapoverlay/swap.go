@@ -46,6 +46,14 @@ type ExecuteRequestMsg struct {
 	USDAmount string
 }
 
+// ModeToggleMsg asks the parent to flip the swap route (direct ↔ api) and
+// requote the same intent.
+type ModeToggleMsg struct {
+	From      swap.TokenInfo
+	To        swap.TokenInfo
+	USDAmount string
+}
+
 // ─── Input messages (sent by parent) ─────────────────────────────────────────
 
 // QuoteResultMsg carries the result of a QuoteRequestMsg. SafetyPending tells
@@ -264,6 +272,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				}
 			case "n":
 				return m.stepBack()
+			case "t":
+				// Requote via the other route; show the loading state meanwhile.
+				m.quote = nil
+				m.quoteErr = ""
+				m.risk = nil
+				m.riskPending = false
+				return m, func() tea.Msg {
+					return ModeToggleMsg{
+						From:      m.selectedFrom.toTokenInfo(),
+						To:        m.selectedTo.toTokenInfo(),
+						USDAmount: m.usdAmount,
+					}
+				}
 			}
 
 		case stepExecuting:
@@ -364,7 +385,12 @@ func (m Model) previewBody() string {
 		return theme.Dim().Render("Loading quote…")
 	}
 	q := m.quote
+	route := "direct — on-chain V2 router, no fee"
+	if q.Mode == "api" {
+		route = "api — OpenOcean best rate, MEV protected"
+	}
 	lines := []string{
+		fmt.Sprintf("Route          %s", route),
 		fmt.Sprintf("USD            %s", q.USDAmountFormatted),
 		fmt.Sprintf("From           %s %s   %s", q.FromTokenAmount, q.FromToken.Symbol, q.FromTokenPriceLine),
 		fmt.Sprintf("Fee (%.2f%%)    %s %s", q.FeePercent, q.FeeAmount, q.FromToken.Symbol),
@@ -372,8 +398,14 @@ func (m Model) previewBody() string {
 		fmt.Sprintf("Estimated      %s %s", q.EstimatedOutput, q.ToToken.Symbol),
 		fmt.Sprintf("Min received   %s %s   (slippage %.2f%%)", q.MinOutput, q.ToToken.Symbol, q.Slippage),
 	}
+	if q.PriceImpact != "" {
+		lines = append(lines, fmt.Sprintf("Price impact   %s", q.PriceImpact))
+	}
 	if q.NeedsApproval {
 		lines = append(lines, theme.Dim().Render("Note: ERC-20 approval required — will be sent automatically."))
+	}
+	if q.Mode != "api" {
+		lines = append(lines, theme.Dim().Render("t: try API route — best rates across 500+ DEXs (needs LazySwap Pass)"))
 	}
 	if line := m.riskLine(); line != "" {
 		lines = append(lines, "", line)
@@ -414,7 +446,7 @@ func (m Model) helpForStep() string {
 	case stepAmount:
 		return "enter: get quote  ·  esc: back"
 	case stepPreview:
-		return "y / enter: execute  ·  n / esc: back"
+		return "y / enter: execute  ·  t: toggle route  ·  n / esc: back"
 	case stepExecuting:
 		return "waiting for receipt…"
 	case stepDone:

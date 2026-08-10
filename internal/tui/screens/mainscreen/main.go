@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	qrcode "github.com/skip2/go-qrcode"
 
+	"github.com/FernandoPazCavalcante/lazyswap/internal/api"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
@@ -70,6 +71,13 @@ type Model struct {
 	flowSvc   *swap.Flow
 	passSvc   *passpkg.Service
 	safetySvc *safety.Service
+	apiClient *api.Client
+
+	// swapMode is the persisted route preference ("", "direct", "api"); the
+	// swap overlay's 't' key toggles it. lastQuoteMode records which route the
+	// latest quote actually used, so execution follows the quoted route.
+	swapMode      string
+	lastQuoteMode string
 
 	panel    walletpanel.Model
 	tokens   tokenspanel.Model
@@ -127,6 +135,8 @@ func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, pa
 		flowSvc:       flowSvc,
 		passSvc:       passSvc,
 		safetySvc:     safety.New(),
+		apiClient:     api.New(""),
+		swapMode:      st.SwapMode,
 		panel:         walletpanel.New(),
 		tokens:        tokenspanel.New(),
 		settings:      settingspanel.New(st.Slippage, chainKey, c.Name),
@@ -172,6 +182,26 @@ func (m Model) persistDefaultWallet(addr string) {
 	if err := settings.SetDefaultWallet(m.dao, addr); err != nil {
 		applog.Error("persist default wallet", err)
 	}
+}
+
+func (m Model) persistSwapMode(mode string) {
+	if m.dao == nil {
+		return
+	}
+	if err := settings.SetSwapMode(m.dao, mode); err != nil {
+		applog.Error("persist swap mode", err)
+	}
+}
+
+// quoteCmds builds the quote command (hybrid route) plus the async safety
+// check when the destination token warrants one.
+func (m Model) quoteCmds(from, to swap.TokenInfo, usd string) tea.Cmd {
+	quoteCmd := hybridQuoteCmd(m.flowSvc, m.apiClient, m.chainKey,
+		from, to, usd, m.current.Address, m.current.PrivateKey, m.slippage, m.useAPIRoute())
+	if safety.ShouldCheck(chain.Get(m.chainKey), to) {
+		return tea.Batch(quoteCmd, safetyCmd(m.safetySvc, m.chainKey, to.Address))
+	}
+	return quoteCmd
 }
 
 // Init kicks off the initial wallet load.
@@ -284,15 +314,67 @@ func deleteCmd(svc *walletpkg.Service, id string) tea.Cmd {
 		return deletedMsg{err: svc.Delete(id)}
 	}
 }
-func quoteSwapCmd(f *swap.Flow, from, to swap.TokenInfo, usd, walletAddr string, slippage float64) tea.Cmd {
+
+// useAPIRoute decides whether a quote should go through the backend: explicit
+// "api" preference, or auto ("") once authenticated — never on chains without
+// OpenOcean coverage.
+func (m Model) useAPIRoute() bool {
+	if chain.Get(m.chainKey).OpenOceanKey == "" {
+		return false
+	}
+	return m.swapMode == settings.SwapModeAPI ||
+		(m.swapMode == "" && m.apiClient.Authenticated())
+}
+
+// hybridQuoteCmd quotes via the API route when asked, authenticating lazily
+// with the wallet's key; any API failure logs and falls back to direct, so
+// the overlay always gets a quote.
+func hybridQuoteCmd(
+	f *swap.Flow, ac *api.Client, chainKey string,
+	from, to swap.TokenInfo, usd, walletAddr, privKey string,
+	slippage float64, useAPI bool,
+) tea.Cmd {
 	return func() tea.Msg {
 		if f == nil {
 			return swapQuoteMsg{err: fmt.Errorf("swap service not configured")}
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+		cfg := chain.Get(chainKey)
+		if useAPI && cfg.OpenOceanKey != "" {
+			ok := ac.Authenticated()
+			if !ok {
+				if _, err := ac.Authenticate(ctx, walletAddr, privKey); err != nil {
+					applog.Warnf("api auth failed, using direct route: %v", err)
+				} else {
+					ok = true
+				}
+			}
+			if ok {
+				q, err := api.QuoteFlow(ctx, ac, f, cfg, from, to, usd, slippage)
+				if err == nil {
+					return swapQuoteMsg{quote: q}
+				}
+				applog.Warnf("api quote failed, using direct route: %v", err)
+			}
+		}
 		q, err := f.Quote(ctx, from, to, usd, slippage, walletAddr)
 		return swapQuoteMsg{quote: q, err: err}
+	}
+}
+
+// executeAPICmd runs the backend-routed execution off the UI loop.
+func executeAPICmd(
+	ac *api.Client, f *swap.Flow, chainKey, privKey string,
+	from, to swap.TokenInfo, usd string, slippage float64,
+) tea.Cmd {
+	return func() tea.Msg {
+		if f == nil {
+			return swapExecMsg{result: swap.FlowResult{Success: false, Err: "swap service not configured"}}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		return swapExecMsg{result: api.ExecuteFlow(ctx, ac, f, chain.Get(chainKey), privKey, from, to, usd, slippage)}
 	}
 }
 
@@ -496,21 +578,36 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if m.current == nil {
 			return m, nil
 		}
-		quoteCmd := quoteSwapCmd(m.flowSvc, msg.From, msg.To, msg.USDAmount, m.current.Address, m.slippage)
-		if safety.ShouldCheck(chain.Get(m.chainKey), msg.To) {
-			return m, tea.Batch(quoteCmd, safetyCmd(m.safetySvc, m.chainKey, msg.To.Address))
+		return m, m.quoteCmds(msg.From, msg.To, msg.USDAmount)
+
+	case swapoverlay.ModeToggleMsg:
+		if m.current == nil {
+			return m, nil
 		}
-		return m, quoteCmd
+		if m.useAPIRoute() {
+			m.swapMode = settings.SwapModeDirect
+		} else {
+			m.swapMode = settings.SwapModeAPI
+		}
+		m.persistSwapMode(m.swapMode)
+		return m, m.quoteCmds(msg.From, msg.To, msg.USDAmount)
 
 	case swapoverlay.ExecuteRequestMsg:
 		if m.current == nil {
 			return m, nil
 		}
-		applog.Tracef("mainscreen — executing swap %s → %s $%s for %s",
-			msg.From.Symbol, msg.To.Symbol, msg.USDAmount, m.current.Address)
+		applog.Tracef("mainscreen — executing %s swap %s → %s $%s for %s",
+			m.lastQuoteMode, msg.From.Symbol, msg.To.Symbol, msg.USDAmount, m.current.Address)
+		// Execute over the route that produced the quote the user confirmed.
+		if m.lastQuoteMode == "api" {
+			return m, executeAPICmd(m.apiClient, m.flowSvc, m.chainKey, m.current.PrivateKey, msg.From, msg.To, msg.USDAmount, m.slippage)
+		}
 		return m, executeSwapCmd(m.flowSvc, m.current.PrivateKey, msg.From, msg.To, msg.USDAmount, m.slippage)
 
 	case swapQuoteMsg:
+		if msg.err == nil {
+			m.lastQuoteMode = msg.quote.Mode
+		}
 		pending := msg.err == nil && safety.ShouldCheck(chain.Get(m.chainKey), msg.quote.ToToken)
 		m.swap, _ = m.swap.Update(swapoverlay.QuoteResultMsg{Quote: msg.quote, Err: msg.err, SafetyPending: pending})
 		return m, nil

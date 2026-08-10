@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/FernandoPazCavalcante/lazyswap/internal/api"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
@@ -31,6 +32,8 @@ func runSwap(args []string) int {
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
 	noSafety := fs.Bool("no-safety", false, "skip the pre-swap token risk check")
 	safetyBlock := fs.Bool("safety-block", false, "refuse to swap when the risk check comes back HIGH")
+	apiMode := fs.Bool("api", false, "route via the lazyswap API (OpenOcean best rates; needs a LazySwap Pass)")
+	directMode := fs.Bool("direct", false, "route directly via the on-chain V2 router (no fee, no auth)")
 
 	// stdlib flag stops at the first positional; loop so flags may appear before,
 	// after, or between the three positionals (e.g. `swap 0.50 BNB USDT --chain bsc`).
@@ -53,6 +56,9 @@ func runSwap(args []string) int {
 	usd, fromSym, toSym := pos[0], pos[1], pos[2]
 	if v, err := strconv.ParseFloat(usd, 64); err != nil || v <= 0 {
 		return die("amount must be a positive USD number, got %q", usd)
+	}
+	if *apiMode && *directMode {
+		return die("--api and --direct are mutually exclusive")
 	}
 
 	dao, err := wallet.Open()
@@ -107,6 +113,18 @@ func runSwap(args []string) int {
 		return die("%v", err)
 	}
 
+	// Resolve the swap route: flag > persisted setting > direct.
+	mode := settings.SwapModeDirect
+	if st.SwapMode != "" {
+		mode = st.SwapMode
+	}
+	if *apiMode {
+		mode = settings.SwapModeAPI
+	}
+	if *directMode {
+		mode = settings.SwapModeDirect
+	}
+
 	// Quote.
 	flow, err := swap.NewFlow(chainKey)
 	if err != nil {
@@ -117,9 +135,37 @@ func runSwap(args []string) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	q, err := flow.Quote(ctx, fromTok, toTok, usd, slippage, w.Address)
-	if err != nil {
-		return die("quote: %v", err)
+	// API mode: SIWE-authenticate with the unlocked key (stateless — nothing
+	// is stored on disk), then quote via the backend. When the API was chosen
+	// by setting (not the --api flag) and is unavailable, fall back to direct.
+	var apiClient *api.Client
+	if mode == settings.SwapModeAPI {
+		apiClient = api.New("")
+		if _, err := apiClient.Authenticate(ctx, w.Address, w.PrivateKey); err != nil {
+			if *apiMode {
+				return die("api auth: %v", err)
+			}
+			fmt.Fprintf(os.Stderr, "lazyswap: API unavailable (%v) — falling back to direct\n", err)
+			mode = settings.SwapModeDirect
+			apiClient = nil
+		}
+	}
+
+	var q swap.FlowQuote
+	if mode == settings.SwapModeAPI {
+		q, err = api.QuoteFlow(ctx, apiClient, flow, c, fromTok, toTok, usd, slippage)
+		if err != nil && !*apiMode {
+			fmt.Fprintf(os.Stderr, "lazyswap: API quote failed (%v) — falling back to direct\n", err)
+			mode = settings.SwapModeDirect
+		} else if err != nil {
+			return die("quote: %v", err)
+		}
+	}
+	if mode == settings.SwapModeDirect {
+		q, err = flow.Quote(ctx, fromTok, toTok, usd, slippage, w.Address)
+		if err != nil {
+			return die("quote: %v", err)
+		}
 	}
 	printQuote(c, w.Address, q)
 
@@ -146,7 +192,12 @@ func runSwap(args []string) int {
 	}
 
 	// Execute.
-	res := flow.Execute(ctx, w.PrivateKey, fromTok, toTok, usd, slippage)
+	var res swap.FlowResult
+	if mode == settings.SwapModeAPI {
+		res = api.ExecuteFlow(ctx, apiClient, flow, c, w.PrivateKey, fromTok, toTok, usd, slippage)
+	} else {
+		res = flow.Execute(ctx, w.PrivateKey, fromTok, toTok, usd, slippage)
+	}
 	if !res.Success {
 		return die("swap failed: %s", res.Err)
 	}
@@ -158,7 +209,15 @@ func runSwap(args []string) int {
 }
 
 func printQuote(c chain.Config, walletAddr string, q swap.FlowQuote) {
+	route := "direct (on-chain V2 router)"
+	if q.Mode == "api" {
+		route = "api (OpenOcean best rate, MEV protected)"
+	}
 	fmt.Printf("Swap on %s using %s\n", c.Name, walletAddr)
+	fmt.Printf("  route     %s\n", route)
+	if q.PriceImpact != "" {
+		fmt.Printf("  impact    %s\n", q.PriceImpact)
+	}
 	fmt.Printf("  spend     %s of %s (%s %s) %s\n",
 		q.USDAmountFormatted, q.FromToken.Symbol, q.NetFromTokenAmount, q.FromToken.Symbol, q.FromTokenPriceLine)
 	fmt.Printf("  receive   ~%s %s\n", q.EstimatedOutput, q.ToToken.Symbol)
