@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -78,11 +77,11 @@ func runSwap(args []string) int {
 	}
 	c := chain.Get(chainKey)
 
-	fromTok, err := resolveToken(c, fromSym)
+	fromTok, err := swap.ResolveToken(c, fromSym)
 	if err != nil {
 		return die("%v", err)
 	}
-	toTok, err := resolveToken(c, toSym)
+	toTok, err := swap.ResolveToken(c, toSym)
 	if err != nil {
 		return die("%v", err)
 	}
@@ -100,7 +99,7 @@ func runSwap(args []string) int {
 	if err != nil {
 		return die("load wallets: %v", err)
 	}
-	w, err := pickWallet(ws, *walletFlag, st.DefaultWallet)
+	w, err := wallet.Pick(ws, *walletFlag, st.DefaultWallet)
 	if err != nil {
 		return die("%v", err)
 	}
@@ -143,61 +142,6 @@ func runSwap(args []string) int {
 		fmt.Printf("  %s\n", url)
 	}
 	return 0
-}
-
-// resolveToken maps a symbol to a swap.TokenInfo for the given chain. The
-// chain's native symbol resolves to the native sentinel.
-func resolveToken(c chain.Config, symbol string) (swap.TokenInfo, error) {
-	up := strings.ToUpper(symbol)
-	if up == strings.ToUpper(c.NativeSymbol) {
-		return swap.TokenInfo{Symbol: c.NativeSymbol, Address: swap.NativeSentinel, Decimals: c.NativeDecimals}, nil
-	}
-	if t, ok := c.Tokens[up]; ok {
-		return swap.TokenInfo{Symbol: t.Symbol, Address: t.Address, Decimals: t.Decimals}, nil
-	}
-	return swap.TokenInfo{}, fmt.Errorf("unknown token %q on %s; available: %s", symbol, c.Name, availableSymbols(c))
-}
-
-func availableSymbols(c chain.Config) string {
-	syms := []string{c.NativeSymbol}
-	for k := range c.Tokens {
-		syms = append(syms, k)
-	}
-	sort.Strings(syms)
-	return strings.Join(syms, ", ")
-}
-
-// pickWallet resolves which wallet to use: --wallet flag > configured default >
-// the only wallet. Errors when ambiguous or not found.
-func pickWallet(ws []wallet.Wallet, flagAddr, defaultAddr string) (wallet.Wallet, error) {
-	if len(ws) == 0 {
-		return wallet.Wallet{}, errors.New("no wallets — create one in the TUI (`lazyswap`)")
-	}
-	if flagAddr != "" {
-		if w, ok := findWallet(ws, flagAddr); ok {
-			return w, nil
-		}
-		return wallet.Wallet{}, fmt.Errorf("no wallet with address %s", flagAddr)
-	}
-	if defaultAddr != "" {
-		if w, ok := findWallet(ws, defaultAddr); ok {
-			return w, nil
-		}
-		return wallet.Wallet{}, fmt.Errorf("default wallet %s not found; set one with `lazyswap config set-wallet`", defaultAddr)
-	}
-	if len(ws) == 1 {
-		return ws[0], nil
-	}
-	return wallet.Wallet{}, errors.New("multiple wallets — set a default (`lazyswap config set-wallet <addr>`) or pass --wallet")
-}
-
-func findWallet(ws []wallet.Wallet, addr string) (wallet.Wallet, bool) {
-	for _, w := range ws {
-		if strings.EqualFold(w.Address, addr) {
-			return w, true
-		}
-	}
-	return wallet.Wallet{}, false
 }
 
 func printQuote(c chain.Config, walletAddr string, q swap.FlowQuote) {

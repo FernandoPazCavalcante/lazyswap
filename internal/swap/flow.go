@@ -24,57 +24,57 @@ var btcToken = TokenInfo{Symbol: "BTC", Address: "bitcoin", Decimals: 8}
 
 // TokenInfo identifies a token in the swap flow. Address may be NativeSentinel.
 type TokenInfo struct {
-	Symbol   string
-	Address  string
-	Decimals uint8
+	Symbol   string `json:"symbol"`
+	Address  string `json:"address"`
+	Decimals uint8  `json:"decimals"`
 }
 
 // FlowQuote is the full USD-denominated quote returned by Flow.Quote.
 type FlowQuote struct {
-	FromToken TokenInfo
-	ToToken   TokenInfo
+	FromToken TokenInfo `json:"fromToken"`
+	ToToken   TokenInfo `json:"toToken"`
 
-	USDAmount          string // raw user input, e.g. "50"
-	USDAmountFormatted string // "$50.00"
+	USDAmount          string `json:"usdAmount"`          // raw user input, e.g. "50"
+	USDAmountFormatted string `json:"usdAmountFormatted"` // "$50.00"
 
-	FromTokenAmount    string // gross from-token amount (pre-fee)
-	FromTokenPriceLine string // "@ $600.12/BNB"
+	FromTokenAmount    string `json:"fromTokenAmount"`    // gross from-token amount (pre-fee)
+	FromTokenPriceLine string `json:"fromTokenPriceLine"` // "@ $600.12/BNB"
 
-	EstimatedOutput string // raw DEX quote for the net amount
-	MinOutput       string // estimated * (1 - slippage/100)
+	EstimatedOutput string `json:"estimatedOutput"` // raw DEX quote for the net amount
+	MinOutput       string `json:"minOutput"`       // estimated * (1 - slippage/100)
 
-	Slippage      float64
-	NeedsApproval bool
+	Slippage      float64 `json:"slippage"`
+	NeedsApproval bool    `json:"needsApproval"`
 
-	FeePercent         float64
-	FeeAmount          string // formatted, e.g. "0.000125"
-	NetFromTokenAmount string // gross - fee, formatted
+	FeePercent         float64 `json:"feePercent"`
+	FeeAmount          string  `json:"feeAmount"`          // formatted, e.g. "0.000125"
+	NetFromTokenAmount string  `json:"netFromTokenAmount"` // gross - fee, formatted
 
 	// THORchain-specific fields, set when IsThorchain is true (EVM → BTC).
-	IsThorchain          bool
-	ThorEstimatedSeconds int    // settlement estimate in seconds
-	ThorFees             string // total fees in BTC, formatted
-	BTCAddress           string // destination Bitcoin address (empty for estimate)
-	ThorMemo             string // encoded THORchain memo (empty for estimate)
-	EstimatedOutputSats  int64  // expected BTC output in sats (1e8 base units)
+	IsThorchain          bool   `json:"isThorchain"`
+	ThorEstimatedSeconds int    `json:"thorEstimatedSeconds,omitempty"` // settlement estimate in seconds
+	ThorFees             string `json:"thorFees,omitempty"`             // total fees in BTC, formatted
+	BTCAddress           string `json:"btcAddress,omitempty"`           // destination Bitcoin address (empty for estimate)
+	ThorMemo             string `json:"thorMemo,omitempty"`             // encoded THORchain memo (empty for estimate)
+	EstimatedOutputSats  int64  `json:"estimatedOutputSats,omitempty"`  // expected BTC output in sats (1e8 base units)
 
 	// THORChain enforces a per-token minimum input (covers the BTC network
 	// outbound fee). These describe it for the current token/price.
-	ThorBelowMin       bool   // true when the requested amount is under the minimum
-	ThorMinTokenAmount string // minimum input in from-token units, e.g. "4.016789"
-	ThorMinUSD         string // that minimum as approx USD, e.g. "$4.02"
+	ThorBelowMin       bool   `json:"thorBelowMin,omitempty"`       // true when the requested amount is under the minimum
+	ThorMinTokenAmount string `json:"thorMinTokenAmount,omitempty"` // minimum input in from-token units, e.g. "4.016789"
+	ThorMinUSD         string `json:"thorMinUSD,omitempty"`         // that minimum as approx USD, e.g. "$4.02"
 }
 
 // FlowResult is the outcome of Flow.Execute.
 type FlowResult struct {
-	Success      bool
-	TxHash       string
-	FromToken    string
-	ToToken      string
-	InputAmount  string // formatted as "$<usd>"
-	OutputAmount string
-	GasUsed      string
-	Err          string
+	Success      bool   `json:"success"`
+	TxHash       string `json:"txHash"`
+	FromToken    string `json:"fromToken"`
+	ToToken      string `json:"toToken"`
+	InputAmount  string `json:"inputAmount"` // formatted as "$<usd>"
+	OutputAmount string `json:"outputAmount"`
+	GasUsed      string `json:"gasUsed"`
+	Err          string `json:"error,omitempty"`
 }
 
 // UsdConversion is the output of Flow.ConvertUsdToTokenAmount.

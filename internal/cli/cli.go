@@ -30,6 +30,8 @@ func Run(args []string) int {
 		return runWallets(args[1:])
 	case "set":
 		return runSet(args[1:])
+	case "mcp":
+		return runMcp(args[1:])
 	case "help", "-h", "--help":
 		usage(os.Stdout)
 		return 0
@@ -61,6 +63,7 @@ Usage:
   lazyswap config set-slippage <pct>    set the default slippage
   lazyswap wallets                      list wallet addresses
   lazyswap set password                 print an export line; use: eval "$(lazyswap set password)"
+  lazyswap mcp                          serve the MCP server for AI agents (stdio)
   lazyswap help | version
 
 swap flags:
@@ -68,6 +71,11 @@ swap flags:
   --chain <key>        override the default chain for this swap
   --slippage <pct>     override the default slippage for this swap
   --yes                skip the y/N confirmation
+
+mcp flags:
+  --allow-trading      register the swap_execute / buy_pass tools (default: read-only)
+  --max-usd <usd>      per-swap USD cap, required with --allow-trading
+  --chain <keys>       comma-separated chain allowlist for trading tools
 
 Example:
   lazyswap swap 0.50 BNB USDT     # $0.50 of BNB into USDT on the default chain

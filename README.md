@@ -38,10 +38,45 @@ lazyswap swap 0.50 BNB USDT       # swap $0.50 worth of BNB into USDT
 lazyswap swap 5 BNB USDT --yes    # skip the y/N confirmation (handy in scripts)
 lazyswap wallets                  # list wallet addresses
 lazyswap config show              # print current chain / slippage / default wallet
+lazyswap mcp                      # serve the MCP server for AI agents (stdio)
 lazyswap help                     # full command reference
 ```
 
 Set `LAZYSWAP_PASSWORD` to skip the interactive password prompt when scripting.
+
+## MCP server (AI agents)
+
+`lazyswap mcp` serves your wallet to AI agents (Claude Code, Cursor, …) over
+the Model Context Protocol on stdio. **Read-only by default**: agents can list
+chains and wallets, fetch balances, quote swaps, and read/write settings — but
+not trade.
+
+```bash
+claude mcp add lazyswap -- lazyswap mcp        # register with Claude Code
+```
+
+Or in `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "lazyswap": { "command": "lazyswap", "args": ["mcp"] }
+  }
+}
+```
+
+To let an agent actually execute swaps, opt in explicitly:
+
+```bash
+LAZYSWAP_PASSWORD=… lazyswap mcp --allow-trading --max-usd 20 --chain bsc
+```
+
+- `--allow-trading` registers the `swap_execute` / `buy_pass` tools; without it
+  they don't exist, so a prompt-injected agent has nothing to call.
+- `--max-usd` is a code-enforced per-swap cap (required with trading).
+- `--chain` optionally restricts trading to an allowlist of chains.
+- The wallet password comes from the `LAZYSWAP_PASSWORD` environment only —
+  it is never a tool parameter, so it can never end up in a model's context.
 
 ## Installation
 

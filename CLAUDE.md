@@ -41,6 +41,7 @@ lazyswap swap 0.50 BNB USDT       # swap BNB → USDT
 lazyswap swap 5 BNB USDT --yes    # skip confirmation
 lazyswap wallets                  # list wallet addresses
 lazyswap config show              # print chain/slippage/default-wallet
+lazyswap mcp                      # MCP server for AI agents (stdio); read-only unless --allow-trading --max-usd <n>
 lazyswap help                     # full command reference
 ```
 
@@ -54,7 +55,8 @@ Layers: **TUI → Services → DAO / Blockchain**
 
 ```
 main.go
-  ├── internal/cli        — non-interactive commands (swap, wallets, config, set password)
+  ├── internal/cli        — non-interactive commands (swap, wallets, config, set password, mcp)
+  ├── internal/mcp        — MCP stdio server for AI agents (delegates to the same services; never prints)
   └── internal/tui        — Bubble Tea screens / panels / overlays / theme / keys
         ├── internal/wallet     — wallet CRUD + SQLite DAO (modernc/sqlite, cgo-free)
         ├── internal/swap       — quote + execute orchestration (EVM + BTC)
@@ -80,6 +82,7 @@ main.go
 | `internal/chain/config.go` | **CHAINS map** — single source of truth for RPC URLs, router/token addresses |
 | `internal/tui/` | Bubble Tea model, screens, panels, overlays, theme, keybindings |
 | `internal/cli/` | Non-interactive CLI commands |
+| `internal/mcp/` | MCP stdio server — read-only tools by default; `swap_execute`/`buy_pass` only with `--allow-trading` + `--max-usd` cap, password via `LAZYSWAP_PASSWORD` env only |
 | `internal/wallet/` | Wallet CRUD + SQLite DAO |
 | `internal/crypto/` | AES-256-GCM + PBKDF2 encryption |
 | `internal/pass/` | LazySwapPass ERC-721 (deployed on `bsc_testnet` only) |
