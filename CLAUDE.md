@@ -27,6 +27,13 @@ go test -cover ./...              # with coverage
 
 # Release build (cross-compile → dist/)
 bash scripts/build-release.sh     # CGO_ENABLED=0; targets: linux-x64/arm64, darwin-x64/arm64
+
+# Quality gates (see REVIEW.md for thresholds; CI enforces on every PR)
+make gate                    # lint + coverage >= 70% (ex-TUI) — the PR-gate mirror
+make lint                    # golangci-lint (cyclomatic <= 15, funcs <= 80 lines, files <= 500)
+make cover                   # coverage gate (scripts/coverage-gate.sh)
+make e2e                     # CLI quote + TUI smoke (build tag e2e); funded swap self-skips
+make mutate                  # gremlins mutation run (nightly enforces >= 50%)
 ```
 
 **Install from source:**
@@ -119,8 +126,11 @@ main.go
 - `lazyswap set password` emits `export LAZYSWAP_PASSWORD=…` only when stdout is not a TTY (captured), to avoid terminal leakage.
 
 ### Testing
-- Test behavior and data only. **Do not test `View()` / layout / ASCII art** — they churn.
-- Useful env vars in tests: `LAZYSWAP_PASSWORD` (skips prompt), `LAZYSWAP_DATA_DIR`, `LAZYSWAP_TEST=1`.
+- Test behavior and data only. **Do not test `View()` / layout / ASCII art** — they churn. TUI e2e smoke (teatest) asserts stable substrings only.
+- Useful env vars in tests: `LAZYSWAP_PASSWORD` (skips prompt), `LAZYSWAP_DATA_DIR`, `LAZYSWAP_TEST=1`, `LAZYSWAP_RPC_URL` (overrides every chain's RPC — point it at `internal/testrpc`), `LAZYSWAP_THORNODE_URL` (overrides the THORnode API).
+- `internal/testrpc` is the fake EVM JSON-RPC for unit tests (getAmountsOut/balanceOf/allowance + tx lifecycle). It is excluded from the coverage denominator.
+- CLI goldens live in `internal/cli/testdata/*.golden`; regenerate with `go test ./internal/cli/ -update` and review the diff like code.
+- E2E env: `LAZYSWAP_E2E_MNEMONIC` (funded bsc_testnet wallet — nightly only).
 
 ### TS parity
 - Most packages mirror a TypeScript file in `lazyswap-old/` (noted as `// Mirrors src/...`). When changing behavior, keep parity with the Bun reference unless intentionally diverging.

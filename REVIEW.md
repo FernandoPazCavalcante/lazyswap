@@ -63,5 +63,12 @@ Notes:
 - TUI smoke uses teatest and asserts **stable substrings only** — if a smoke
   test breaks on a copy tweak, fix the marker, not the copy.
 - E2E env: `LAZYSWAP_E2E_MNEMONIC` (funded bsc_testnet wallet, nightly only);
-  optional `LAZYSWAP_E2E_RPC` override if public-RPC flake becomes chronic.
+  `LAZYSWAP_RPC_URL` overrides every chain's RPC (fake RPC in unit tests, a
+  paid endpoint in CI if public-RPC flake becomes chronic).
+- Coverage-denominator exclusions are a closed list: `internal/tui` (View rule)
+  and `internal/testrpc` (test support). Adding to it needs review sign-off.
+- Known gap: bsc_testnet's configured router has **no stablecoin liquidity
+  path**, so USD-quoting fails there — the quote e2e runs read-only against
+  bsc mainnet, and the funded nightly swap will fail until the testnet chain
+  config gets a routable stablecoin.
 - `make gate` before pushing; CI is the same commands.
