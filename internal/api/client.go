@@ -281,3 +281,60 @@ func (c *Client) SwapTx(ctx context.Context, req SwapRequest) (Tx, TxMeta, error
 	}
 	return d.Tx, d.Meta, nil
 }
+
+// ─── referral routes ─────────────────────────────────────────────────────────
+
+// ReferralCodeInfo is the caller's own referral code.
+type ReferralCodeInfo struct {
+	Code       string `json:"code"`
+	Wallet     string `json:"wallet"`
+	InviteLink string `json:"inviteLink"`
+	CreatedAt  string `json:"createdAt"`
+}
+
+// ReferralStats is the referrer dashboard.
+type ReferralStats struct {
+	Code          string  `json:"code"`
+	TotalReferred int     `json:"totalReferred"`
+	TotalSwaps    int     `json:"totalSwaps"`
+	TotalVolume   float64 `json:"totalVolume"`
+	TotalEarned   float64 `json:"totalEarned"`
+	TotalClaimed  float64 `json:"totalClaimed"`
+	Claimable     float64 `json:"claimable"`
+	CanClaim      bool    `json:"canClaim"`
+	MinClaim      float64 `json:"minClaim"`
+}
+
+// ReferralClaimResult is the outcome of a claim: a pending manual payout.
+type ReferralClaimResult struct {
+	ClaimID   string  `json:"claimId"`
+	AmountUsd float64 `json:"amountUsd"`
+	Status    string  `json:"status"`
+	Note      string  `json:"note"`
+}
+
+// ReferralCode fetches (creating on first call) the wallet's referral code.
+func (c *Client) ReferralCode(ctx context.Context) (ReferralCodeInfo, error) {
+	var d ReferralCodeInfo
+	err := c.post(ctx, "/api/v1/referrals/code", struct{}{}, &d)
+	return d, err
+}
+
+// ReferralStats fetches the referrer dashboard.
+func (c *Client) ReferralStats(ctx context.Context) (ReferralStats, error) {
+	var d ReferralStats
+	err := c.post(ctx, "/api/v1/referrals/me", struct{}{}, &d)
+	return d, err
+}
+
+// ReferralApply binds this wallet to a referrer's code — once, forever.
+func (c *Client) ReferralApply(ctx context.Context, code string) error {
+	return c.post(ctx, "/api/v1/referrals/apply", map[string]string{"code": code}, nil)
+}
+
+// ReferralClaim sweeps claimable earnings into a pending manual payout.
+func (c *Client) ReferralClaim(ctx context.Context) (ReferralClaimResult, error) {
+	var d ReferralClaimResult
+	err := c.post(ctx, "/api/v1/referrals/claim", struct{}{}, &d)
+	return d, err
+}

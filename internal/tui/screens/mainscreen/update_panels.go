@@ -38,6 +38,13 @@ func (m Model) handlePassMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		}
 		m.pass.SetStatus(msg.status)
 		return m, nil, true
+	case referralStatsMsg:
+		if msg.err != nil {
+			m.referral.SetError(msg.err.Error())
+			return m, nil, true
+		}
+		m.referral.SetStats(msg.stats)
+		return m, nil, true
 	}
 	return m, nil, false
 }

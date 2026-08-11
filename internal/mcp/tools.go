@@ -52,6 +52,8 @@ func (s *server) register(srv *sdk.Server) {
 		Description: "Update persisted settings: default chain, slippage percent, default wallet."}, s.setSettings)
 	sdk.AddTool(srv, &sdk.Tool{Name: "get_pass_status",
 		Description: "Check LazySwapPass (ERC-721) validity and expiry for a wallet."}, s.getPassStatus)
+	sdk.AddTool(srv, &sdk.Tool{Name: "get_referral_stats",
+		Description: "Referral dashboard: code, referred wallets, earned/claimable USD. Read-only; needs --allow-trading (SIWE auth signs with the wallet key)."}, s.getReferralStats)
 
 	if s.opts.AllowTrading {
 		sdk.AddTool(srv, &sdk.Tool{Name: "swap_execute",
@@ -371,6 +373,24 @@ func (s *server) setSettings(ctx context.Context, req *sdk.CallToolRequest, in s
 		}
 	}
 	return s.getSettings(ctx, req, getSettingsIn{})
+}
+
+// ---- get_referral_stats ----
+
+type referralStatsIn struct {
+	Wallet string `json:"wallet,omitempty" jsonschema:"wallet address (default: configured default wallet)"`
+}
+
+func (s *server) getReferralStats(ctx context.Context, req *sdk.CallToolRequest, in referralStatsIn) (*sdk.CallToolResult, apiclient.ReferralStats, error) {
+	ac, err := s.apiAuthed(ctx, in.Wallet)
+	if err != nil {
+		return nil, apiclient.ReferralStats{}, err
+	}
+	st, err := ac.ReferralStats(ctx)
+	if err != nil {
+		return nil, apiclient.ReferralStats{}, err
+	}
+	return nil, st, nil
 }
 
 // ---- get_pass_status / buy_pass ----

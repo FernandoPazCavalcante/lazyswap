@@ -49,6 +49,11 @@ type passStatusMsg struct {
 	status passpkg.Status
 	err    error
 }
+type referralStatsMsg struct {
+	stats api.ReferralStats
+	err   error
+}
+
 type passBoughtMsg struct {
 	txHash string
 	err    error
@@ -289,5 +294,27 @@ func (m *Model) refreshPassCmd() tea.Cmd {
 		defer cancel()
 		st, err := svc.Status(ctx, addr)
 		return passStatusMsg{status: st, err: err}
+	}
+}
+
+// referralStatsCmd authenticates lazily with the current wallet's key and
+// fetches the referral dashboard (display-only tab; claims run via the CLI).
+func (m *Model) referralStatsCmd() tea.Cmd {
+	if m.current == nil {
+		return nil
+	}
+	m.referral.SetLoading()
+	ac := m.apiClient
+	addr, key := m.current.Address, m.current.PrivateKey
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if !ac.Authenticated() {
+			if _, err := ac.Authenticate(ctx, addr, key); err != nil {
+				return referralStatsMsg{err: err}
+			}
+		}
+		st, err := ac.ReferralStats(ctx)
+		return referralStatsMsg{stats: st, err: err}
 	}
 }

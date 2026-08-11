@@ -47,6 +47,7 @@ lazyswap swap 0.50 BNB USDT       # swap $0.50 worth of BNB into USDT
 lazyswap swap 5 BNB USDT --yes    # skip the y/N confirmation (handy in scripts)
 lazyswap swap 5 BNB USDT --api    # route via the API (OpenOcean best rate; needs a Pass)
 lazyswap config set-swap-mode api # make the API route the default
+lazyswap referral code            # your referral code — earn a share of referred swap fees
 lazyswap wallets                  # list wallet addresses
 lazyswap config show              # print current chain / slippage / default wallet
 lazyswap mcp                      # serve the MCP server for AI agents (stdio)

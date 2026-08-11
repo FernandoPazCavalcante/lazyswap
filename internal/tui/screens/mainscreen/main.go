@@ -18,6 +18,7 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/importoverlay"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/swapoverlay"
 	passpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/lazyswappass"
+	referralpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/referral"
 	settingspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/settings"
 	swapbtcpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/swapbtc"
 	tokenspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/tokens"
@@ -49,6 +50,7 @@ type tab int
 
 const (
 	tabTokens   tab = 1
+	tabReferral tab = 2
 	tabSettings tab = 4
 	tabSwapBTC  tab = 5
 	tabPass     tab = 6
@@ -72,6 +74,7 @@ type Model struct {
 
 	panel    walletpanel.Model
 	tokens   tokenspanel.Model
+	referral referralpanel.Model
 	settings settingspanel.Model
 	swapbtc  swapbtcpanel.Model
 	pass     passpanel.Model
@@ -130,6 +133,7 @@ func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, pa
 		swapMode:      st.SwapMode,
 		panel:         walletpanel.New(),
 		tokens:        tokenspanel.New(),
+		referral:      referralpanel.New(),
 		settings:      settingspanel.New(st.Slippage, chainKey, c.Name),
 		swapbtc:       swapbtcpanel.New(),
 		pass:          passPanel,
@@ -217,6 +221,7 @@ func (m *Model) SetSize(w, h int) {
 	}
 	m.panel.SetSize(leftW, bodyH)
 	m.tokens.SetSize(rightW, rightH)
+	m.referral.SetSize(rightW, rightH)
 	m.settings.SetSize(rightW, rightH)
 	m.swapbtc.SetSize(rightW, rightH)
 	m.pass.SetSize(rightW, rightH)
@@ -231,6 +236,7 @@ func (m *Model) applyFocusStyles() {
 	m.panel.SetFocused(m.focus == focusLeft)
 	rightFocused := m.focus == focusRight
 	m.tokens.SetFocused(rightFocused && m.activeTab == tabTokens)
+	m.referral.SetFocused(rightFocused && m.activeTab == tabReferral)
 	m.settings.SetFocused(rightFocused && m.activeTab == tabSettings)
 	m.swapbtc.SetFocused(rightFocused && m.activeTab == tabSwapBTC)
 	m.pass.SetFocused(rightFocused && m.activeTab == tabPass)

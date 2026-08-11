@@ -10,6 +10,10 @@ Usage:
   lazyswap config set-swap-mode <mode>  set the swap route: direct | api
   lazyswap wallets                      list wallet addresses
   lazyswap set password                 print an export line; use: eval "$(lazyswap set password)"
+  lazyswap referral code                show (or create) your referral code + invite link
+  lazyswap referral status              referred wallets, earnings, claimable amount
+  lazyswap referral apply <CODE>        bind this wallet to a referrer (once, forever)
+  lazyswap referral claim               sweep claimable earnings into a manual payout
   lazyswap mcp                          serve the MCP server for AI agents (stdio)
   lazyswap help | version
 

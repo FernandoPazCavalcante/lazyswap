@@ -48,6 +48,7 @@ lazyswap swap 0.50 BNB USDT       # swap BNB → USDT
 lazyswap swap 5 BNB USDT --yes    # skip confirmation
 lazyswap wallets                  # list wallet addresses
 lazyswap config show              # print chain/slippage/default-wallet
+lazyswap referral status          # referral code, referred wallets, claimable USD (also: code|apply|claim)
 lazyswap mcp                      # MCP server for AI agents (stdio); read-only unless --allow-trading --max-usd <n>
 lazyswap help                     # full command reference
 ```
