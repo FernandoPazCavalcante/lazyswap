@@ -1,0 +1,7 @@
+Swap on BSC using 0xA502F4896E1b2B93080EabfFC60018b8D089b872
+  route     api (OpenOcean best rate, MEV protected)
+  impact    0.08%
+  spend     $5.00 of BNB (0.008288 BNB) @ $602.42/BNB
+  receive   ~4.985000 USDT
+  min recv  4.960075 USDT (slippage 0.50%)
+  fee       0.000012 BNB (1.00%)

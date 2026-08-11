@@ -92,10 +92,16 @@ type Flow struct {
 
 // NewFlow dials the chain RPC and returns a configured Flow.
 func NewFlow(chainKey string) (*Flow, error) {
+	return NewFlowAt(chainKey, chain.Get(chainKey).RPCURL)
+}
+
+// NewFlowAt is NewFlow with an explicit RPC endpoint — the chain config's URL
+// in production, a fake RPC in tests.
+func NewFlowAt(chainKey, rpcURL string) (*Flow, error) {
 	c := chain.Get(chainKey)
-	client, err := ethclient.Dial(c.RPCURL)
+	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
-		return nil, fmt.Errorf("dial %s: %w", c.RPCURL, err)
+		return nil, fmt.Errorf("dial %s: %w", rpcURL, err)
 	}
 	return &Flow{chainKey: chainKey, chain: c, client: client}, nil
 }

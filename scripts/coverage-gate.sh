@@ -8,7 +8,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 LAZYSWAP_TEST=1 go test -race -covermode=atomic -coverprofile=coverage.out ./...
-grep -v '/internal/tui/' coverage.out > coverage.gate.out
+# internal/testrpc is test support — its coverage IS its use by other suites.
+grep -v -e '/internal/tui/' -e '/internal/testrpc/' coverage.out > coverage.gate.out
 
 echo
 echo "── least-covered functions (gate scope) ──"

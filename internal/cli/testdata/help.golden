@@ -1,0 +1,38 @@
+lazyswap — vim-style EVM wallet (TUI + CLI)
+
+Usage:
+  lazyswap                              launch the TUI
+  lazyswap swap <usd> <FROM> <TO>       swap $<usd> worth of FROM into TO
+  lazyswap config [show]                print current settings
+  lazyswap config set-wallet <address>  set the default wallet
+  lazyswap config set-chain <key>       set the default chain
+  lazyswap config set-slippage <pct>    set the default slippage
+  lazyswap config set-swap-mode <mode>  set the swap route: direct | api
+  lazyswap wallets                      list wallet addresses
+  lazyswap set password                 print an export line; use: eval "$(lazyswap set password)"
+  lazyswap mcp                          serve the MCP server for AI agents (stdio)
+  lazyswap help | version
+
+swap flags:
+  --wallet <address>   override the default wallet for this swap
+  --chain <key>        override the default chain for this swap
+  --slippage <pct>     override the default slippage for this swap
+  --yes                skip the y/N confirmation
+  --no-safety          skip the pre-swap token risk check
+  --safety-block       refuse the swap when token risk is HIGH
+  --api                route via the lazyswap API (best rates; needs a LazySwap Pass)
+  --direct             route directly via the on-chain V2 router (no fee, no auth)
+  --quote-only         print the quote (and risk check) then exit without executing
+
+mcp flags:
+  --allow-trading      register the swap_execute / buy_pass tools (default: read-only)
+  --max-usd <usd>      per-swap USD cap, required with --allow-trading
+  --chain <keys>       comma-separated chain allowlist for trading tools
+  --allow-risky        let swap_execute buy HIGH-risk tokens (default: refuse)
+
+Example:
+  lazyswap swap 0.50 BNB USDT     # $0.50 of BNB into USDT on the default chain
+
+Environment:
+  LAZYSWAP_PASSWORD    wallet password (skips the interactive prompt)
+  LAZYSWAP_DATA_DIR    data directory (default ~/.lazyswap)

@@ -1,11 +1,12 @@
 // Package theme exposes the lipgloss color palette used across the TUI.
 //
 // Mirrors the OpenTUI theme.ts constants from the Bun reference:
-//   YELLOW     = #FFFF00  primary text / focused borders
-//   YELLOW_DIM = #787800  hints / unfocused borders
-//   YELLOW_SEL = #1E1E00  selected row background
-//   NEAR_BLACK = #080802  app background
-//   RED        = #FF0000  destructive / warnings
+//
+//	YELLOW     = #FFFF00  primary text / focused borders
+//	YELLOW_DIM = #787800  hints / unfocused borders
+//	YELLOW_SEL = #1E1E00  selected row background
+//	NEAR_BLACK = #080802  app background
+//	RED        = #FF0000  destructive / warnings
 package theme
 
 import "github.com/charmbracelet/lipgloss"

@@ -7,9 +7,9 @@ import (
 
 func TestCalcFee(t *testing.T) {
 	cases := []struct {
-		gross   float64
-		fee     float64
-		net     float64
+		gross float64
+		fee   float64
+		net   float64
 	}{
 		{0, 0, 0},
 		{100, 0.15, 99.85},

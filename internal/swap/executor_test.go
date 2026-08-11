@@ -9,9 +9,9 @@ func TestValidateSwapInputs(t *testing.T) {
 	}
 
 	bad := []struct {
-		name                       string
-		from, to, amt              string
-		slip                       float64
+		name          string
+		from, to, amt string
+		slip          float64
 	}{
 		{"empty from", "", "0xto", "1", 0.5},
 		{"empty to", "0xfrom", "  ", "1", 0.5},

@@ -4,6 +4,8 @@
 // of truth for RPC URLs, router addresses, and well-known token addresses.
 package chain
 
+import "os"
+
 // TokenInfo identifies a token by its on-chain address + decimals.
 type TokenInfo struct {
 	Address  string
@@ -153,11 +155,17 @@ var CHAINS = map[string]Config{
 var OrderedKeys = []string{"ethereum", "bsc", "bsc_testnet", "sepolia"}
 
 // Get returns the config for the given key, falling back to DefaultKey.
+// LAZYSWAP_RPC_URL, when set, overrides every chain's RPC endpoint — used by
+// tests (fake RPC) and CI (paid endpoint when public RPCs flake).
 func Get(key string) Config {
-	if c, ok := CHAINS[key]; ok {
-		return c
+	c, ok := CHAINS[key]
+	if !ok {
+		c = CHAINS[DefaultKey]
 	}
-	return CHAINS[DefaultKey]
+	if rpc := os.Getenv("LAZYSWAP_RPC_URL"); rpc != "" {
+		c.RPCURL = rpc
+	}
+	return c
 }
 
 // NextKey returns the chain key following current in OrderedKeys, wrapping

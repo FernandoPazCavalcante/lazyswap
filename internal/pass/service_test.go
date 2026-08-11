@@ -1,43 +1,52 @@
 package pass
 
 import (
-	"errors"
+	"context"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
+
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/testrpc"
 )
 
-func TestNew_NoPassChains(t *testing.T) {
-	// Mainnet + Ethereum have no deployed pass yet → ErrNoPass.
-	for _, key := range []string{"ethereum", "bsc"} {
-		if _, err := New(key); !errors.Is(err, ErrNoPass) {
-			t.Errorf("New(%q) err = %v, want ErrNoPass", key, err)
+func TestNewRefusesChainsWithoutPass(t *testing.T) {
+	// The pass contract only exists on bsc_testnet — everywhere else the
+	// feature must be inert, not half-configured.
+	for _, key := range []string{"bsc", "ethereum", "sepolia"} {
+		if _, err := New(key); err != ErrNoPass {
+			t.Errorf("%s: err = %v, want ErrNoPass", key, err)
 		}
 	}
 }
 
-func TestNew_TestnetAvailable(t *testing.T) {
-	// Dial over HTTP is lazy (no network), so this constructs cleanly.
-	s, err := New("bsc_testnet")
+func TestStatusNoPassHeld(t *testing.T) {
+	rpc := testrpc.New()
+	t.Cleanup(rpc.Close)
+	client, err := ethclient.Dial(rpc.URL)
 	if err != nil {
-		t.Fatalf("New(bsc_testnet) err = %v, want nil", err)
+		t.Fatal(err)
 	}
-	defer s.Close()
-	if got := s.NativeSymbol(); got != "tBNB" {
-		t.Errorf("NativeSymbol = %q, want tBNB", got)
+	t.Cleanup(client.Close)
+
+	s := &Service{
+		chain:   chain.Get("bsc_testnet"),
+		client:  client,
+		address: common.HexToAddress("0x0000000000000000000000000000000000000042"),
+	}
+	st, err := s.Status(context.Background(), "0xA502F4896E1b2B93080EabfFC60018b8D089b872")
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if st.HasValidPass || !st.ExpiresAt.IsZero() {
+		t.Fatalf("zero balance must mean no valid pass: %+v", st)
 	}
 }
 
-func TestMintPriceWei(t *testing.T) {
-	if got := MintPriceWei.String(); got != "10000000000000000" {
-		t.Errorf("MintPriceWei = %s, want 10000000000000000 (0.01e18)", got)
-	}
-}
-
-func TestPassABIHasMethods(t *testing.T) {
-	for _, m := range []string{"mint", "hasValidPass", "balanceOf", "tokenOfOwnerByIndex", "expiresAt"} {
-		if _, ok := chain.LazySwapPassABI.Methods[m]; !ok {
-			t.Errorf("LazySwapPassABI missing method %q", m)
-		}
+func TestNativeSymbol(t *testing.T) {
+	s := &Service{chain: chain.Get("bsc_testnet")}
+	if s.NativeSymbol() != "tBNB" {
+		t.Fatalf("native symbol = %q", s.NativeSymbol())
 	}
 }

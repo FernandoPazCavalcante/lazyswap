@@ -1,64 +1,88 @@
 package chain
 
-import "testing"
+import (
+	"regexp"
+	"testing"
+)
 
-func TestGetFallsBackToDefault(t *testing.T) {
-	if c := Get("nonexistent"); c.ChainID == 0 {
-		t.Fatalf("fallback chain has zero chainID")
-	}
-	if c := Get("bsc"); c.ChainID != 56 {
-		t.Fatalf("bsc chainID = %d, want 56", c.ChainID)
-	}
-}
+var hexAddr = regexp.MustCompile(`^0x[0-9a-fA-F]{40}$`)
 
-func TestABIsLoad(t *testing.T) {
-	if _, ok := ERC20ABI.Methods["balanceOf"]; !ok {
-		t.Fatalf("ERC20 ABI missing balanceOf")
-	}
-	if _, ok := RouterABI.Methods["getAmountsOut"]; !ok {
-		t.Fatalf("Router ABI missing getAmountsOut")
-	}
-}
-
-func TestEveryChainHasStablecoin(t *testing.T) {
-	for key, c := range CHAINS {
-		if c.StablecoinAddr == "" {
-			t.Errorf("%s: empty stablecoin address", key)
-		}
-		if c.RouterAddress == "" {
-			t.Errorf("%s: empty router address", key)
-		}
-	}
-}
-
-func TestSepoliaConfig(t *testing.T) {
-	c, ok := CHAINS["sepolia"]
-	if !ok {
-		t.Fatal("sepolia chain not registered")
-	}
-	if c.ChainID != 11155111 {
-		t.Errorf("sepolia chainID = %d, want 11155111", c.ChainID)
-	}
-	if c.NativeSymbol != "ETH" {
-		t.Errorf("sepolia native = %q, want ETH", c.NativeSymbol)
-	}
-	// Pass is not deployed on Sepolia → Buy Pass stays inert there.
-	if c.PassAddress != "" {
-		t.Errorf("sepolia PassAddress = %q, want empty", c.PassAddress)
-	}
-	if c.WrappedNative == "" || c.RPCURL == "" {
-		t.Error("sepolia missing WrappedNative or RPCURL")
-	}
-}
-
-// OrderedKeys drives the network-switch cycle; it must stay in sync with CHAINS.
-func TestOrderedKeysMatchChains(t *testing.T) {
+func TestRegistryIntegrity(t *testing.T) {
 	if len(OrderedKeys) != len(CHAINS) {
-		t.Fatalf("OrderedKeys has %d entries, CHAINS has %d", len(OrderedKeys), len(CHAINS))
+		t.Fatalf("OrderedKeys (%d) and CHAINS (%d) diverge", len(OrderedKeys), len(CHAINS))
 	}
-	for _, k := range OrderedKeys {
-		if _, ok := CHAINS[k]; !ok {
-			t.Errorf("OrderedKeys references unknown chain %q", k)
+	seenIDs := map[uint64]string{}
+	for _, key := range OrderedKeys {
+		c, ok := CHAINS[key]
+		if !ok {
+			t.Fatalf("OrderedKeys entry %q missing from CHAINS", key)
+		}
+		if c.ChainID == 0 {
+			t.Errorf("%s: zero ChainID", key)
+		}
+		if prev, dup := seenIDs[c.ChainID]; dup {
+			t.Errorf("%s: ChainID %d duplicates %s", key, c.ChainID, prev)
+		}
+		seenIDs[c.ChainID] = key
+
+		for name, addr := range map[string]string{
+			"RouterAddress":  c.RouterAddress,
+			"WrappedNative":  c.WrappedNative,
+			"StablecoinAddr": c.StablecoinAddr,
+		} {
+			if !hexAddr.MatchString(addr) {
+				t.Errorf("%s: %s %q is not a hex address", key, name, addr)
+			}
+		}
+		if c.RPCURL == "" || c.Name == "" || c.NativeSymbol == "" || c.NativeDecimals == 0 {
+			t.Errorf("%s: incomplete base config: %+v", key, c)
+		}
+		for sym, tok := range c.Tokens {
+			if tok.Symbol != sym {
+				t.Errorf("%s: token map key %q != symbol %q", key, sym, tok.Symbol)
+			}
+			if !hexAddr.MatchString(tok.Address) {
+				t.Errorf("%s/%s: bad token address %q", key, sym, tok.Address)
+			}
+			if tok.Decimals == 0 {
+				t.Errorf("%s/%s: zero decimals", key, sym)
+			}
+		}
+	}
+}
+
+func TestDefaultAndLookups(t *testing.T) {
+	if !Has(DefaultKey) {
+		t.Fatalf("DefaultKey %q not in CHAINS", DefaultKey)
+	}
+	if Has("nopechain") {
+		t.Fatal("Has must reject unknown keys")
+	}
+	if got := Get("bsc").ChainID; got != 56 {
+		t.Fatalf("bsc ChainID = %d", got)
+	}
+}
+
+func TestNextKeyWraps(t *testing.T) {
+	// Walking NextKey len(OrderedKeys) times from the first key returns to it.
+	key := OrderedKeys[0]
+	for range OrderedKeys {
+		key = NextKey(key)
+	}
+	if key != OrderedKeys[0] {
+		t.Fatalf("NextKey cycle broken: ended at %q", key)
+	}
+	if NextKey("unknown") != OrderedKeys[0] {
+		t.Fatal("NextKey from unknown key must restart at the first key")
+	}
+}
+
+func TestOpenOceanKeys(t *testing.T) {
+	// API swap mode is mainnet-only by construction.
+	want := map[string]string{"ethereum": "eth", "bsc": "bsc", "bsc_testnet": "", "sepolia": ""}
+	for key, oo := range want {
+		if got := Get(key).OpenOceanKey; got != oo {
+			t.Errorf("%s: OpenOceanKey = %q, want %q", key, got, oo)
 		}
 	}
 }

@@ -129,6 +129,56 @@ func TestSwapQuoteSendsBearer(t *testing.T) {
 	}
 }
 
+func TestSwapTxParsesTxAndMeta(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/swap/tx" {
+			w.WriteHeader(404)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"success":true,"data":{"tx":{"to":"0xrouter","data":"0x00","value":"0","gasPrice":"1000000000","gasLimit":"210000","chainId":56},"meta":{"inToken":"BNB","outToken":"USDT","outAmount":"600","minOutAmount":"597","priceImpact":"0.01%","feePercent":1,"feeAmountUsd":6}}}`)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := New(srv.URL)
+	c.jwt = "jwt-test"
+	tx, meta, err := c.SwapTx(context.Background(), SwapRequest{Chain: "bsc"})
+	if err != nil {
+		t.Fatalf("swap tx: %v", err)
+	}
+	if tx.To != "0xrouter" || tx.ChainID != 56 || tx.GasLimit != "210000" {
+		t.Fatalf("tx parsed wrong: %+v", tx)
+	}
+	if meta.FeePercent != 1 || meta.FeeAmountUsd != 6 || meta.OutToken != "USDT" {
+		t.Fatalf("meta parsed wrong: %+v", meta)
+	}
+}
+
+func TestBaseURLEnvOverride(t *testing.T) {
+	t.Setenv("LAZYSWAP_API_URL", "")
+	if BaseURL() != DefaultBaseURL {
+		t.Fatalf("default base = %q", BaseURL())
+	}
+	t.Setenv("LAZYSWAP_API_URL", "http://localhost:9999")
+	if BaseURL() != "http://localhost:9999" {
+		t.Fatalf("override base = %q", BaseURL())
+	}
+	if c := New(""); c.base != "http://localhost:9999" {
+		t.Fatalf("New(\"\") must use the env override, got %q", c.base)
+	}
+}
+
+func TestPostRejectsMalformedEnvelope(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, "not json at all")
+	}))
+	t.Cleanup(srv.Close)
+	c := New(srv.URL)
+	if _, err := c.SwapQuote(context.Background(), SwapRequest{}); err == nil ||
+		!strings.Contains(err.Error(), "bad response") {
+		t.Fatalf("want bad-response error, got %v", err)
+	}
+}
+
 func TestOOAddressMapsNative(t *testing.T) {
 	native := swap.TokenInfo{Symbol: "BNB", Address: swap.NativeSentinel}
 	if got := ooAddress(native); got != OONativeAddress {

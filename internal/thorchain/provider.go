@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -53,9 +54,14 @@ type Provider struct {
 }
 
 // NewProvider returns a Provider wired to the public endpoint.
+// LAZYSWAP_THORNODE_URL overrides it (tests, self-hosted THORnode).
 func NewProvider() *Provider {
+	url := NodeURL
+	if v := os.Getenv("LAZYSWAP_THORNODE_URL"); v != "" {
+		url = v
+	}
 	return &Provider{
-		NodeURL: NodeURL,
+		NodeURL: url,
 		client:  &http.Client{Timeout: 20 * time.Second},
 	}
 }

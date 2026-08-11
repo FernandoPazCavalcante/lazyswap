@@ -72,9 +72,9 @@ func TestEnterAdvancesThroughSteps(t *testing.T) {
 
 func TestAmountSubmitEmitsQuoteRequest(t *testing.T) {
 	m := newOverlay(t)
-	m, _ = m.Update(keyEnter())              // from
+	m, _ = m.Update(keyEnter()) // from
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m, _ = m.Update(keyEnter())              // to
+	m, _ = m.Update(keyEnter()) // to
 	for _, r := range "50" {
 		m, _ = m.Update(keyRune(r))
 	}

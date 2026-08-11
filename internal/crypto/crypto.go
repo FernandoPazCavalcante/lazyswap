@@ -21,12 +21,12 @@ import (
 )
 
 const (
-	KeyLength       = 32      // 256-bit AES key
-	IVLength        = 16      // 128-bit nonce — matches JS implementation
-	SaltLength      = 32      // 256-bit PBKDF2 salt
-	AuthTagLength   = 16      // 128-bit GCM auth tag (Go default)
-	PBKDF2Iter      = 100_000 // matches JS implementation
-	SentinelPlain   = "lazyswap-v1-ok"
+	KeyLength     = 32      // 256-bit AES key
+	IVLength      = 16      // 128-bit nonce — matches JS implementation
+	SaltLength    = 32      // 256-bit PBKDF2 salt
+	AuthTagLength = 16      // 128-bit GCM auth tag (Go default)
+	PBKDF2Iter    = 100_000 // matches JS implementation
+	SentinelPlain = "lazyswap-v1-ok"
 )
 
 // Service holds the derived encryption key.

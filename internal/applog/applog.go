@@ -30,8 +30,8 @@ const (
 )
 
 var (
-	mu      sync.Mutex
-	logPath string
+	mu       sync.Mutex
+	logPath  string
 	resolved bool
 )
 
