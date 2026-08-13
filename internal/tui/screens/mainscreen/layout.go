@@ -21,6 +21,7 @@ func (m Model) availableTabs() []rightpanel.Tab {
 	return []rightpanel.Tab{
 		{Num: int(tabTokens), Label: "Tokens"},
 		{Num: int(tabReferral), Label: "Referral"},
+		{Num: int(tabAlerts), Label: "Alerts"},
 		{Num: int(tabSettings), Label: "Settings"},
 		{Num: int(tabSwapBTC), Label: "Swap BTC"},
 		{Num: int(tabPass), Label: "Lazyswap Pass"},
@@ -62,6 +63,8 @@ func (m Model) activeTabView() string {
 	switch m.activeTab {
 	case tabReferral:
 		return m.referral.View()
+	case tabAlerts:
+		return m.alerts.View()
 	case tabSettings:
 		return m.settings.View()
 	case tabSwapBTC:
@@ -91,6 +94,8 @@ func (m *Model) onTabActivated() tea.Cmd {
 		return m.refreshPassCmd()
 	case tabReferral:
 		return m.referralStatsCmd()
+	case tabAlerts:
+		return m.alertsRefreshCmd()
 	default:
 		return nil
 	}
