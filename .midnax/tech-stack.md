@@ -1,16 +1,17 @@
 # Tech Stack
 
-**Backend**
-- Go 1.26+ (lazyswap): Bubble Tea (TUI), go-ethereum, btcd/btcutil, modernc.org/sqlite, charmbracelet/lipgloss+bubbles, go-bip39, go-qrcode
-- Solidity 0.8.24 (lazyswap-contracts): Foundry (forge/cast), forge-std, OpenZeppelin Contracts
+## Backend
+- **Go 1.26+** — lazyswap CLI/TUI; cross-compile targets: linux-x64/arm64, darwin-x64/arm64
+- **Solidity 0.8.24** — lazyswap-contracts; Foundry toolchain (forge, cast)
 
-**Frontend**
-- TypeScript, React 18, Vite 6, Tailwind CSS v4, shadcn/ui (Radix UI), MUI v7, lucide-react, motion, react-router v7 (lazyswap-site)
-- Markdown/YAML content (marketingskills); Node.js 18+ CLI scripts (zero-dependency)
-- HTML/CSS (resume); Node.js + Playwright for PDF rendering
+## Frontend
+- **TypeScript** — lazyswap-site React SPA
+- **React 18** + **Vite 6** — bundler with HMR
+- **Tailwind CSS v4** (@tailwindcss/vite plugin)
+- **shadcn/ui** (Radix UI primitives) + **MUI v7**
+- **react-router v7**, **react-hook-form**, **recharts**, **react-dnd**, **lucide-react**, **motion**
+- **pnpm** — package manager (required; no npm/yarn)
 
-**Infrastructure**
-- Helm (YAML/Go templates) with Bash tooling (flagsmith-charts)
-- Docker Compose (home-server, rinha-de-backend-2024-q1)
-- Cloudflare Workers (Wrangler v4) + static assets (lazyswap-site)
-- Bash/PowerShell scripts (rinha-de-backend-2024-q1 test runner)
+## Infrastructure
+- **Cloudflare Workers** (Wrangler v4) — lazyswap-site deployment runtime
+- **Foundry** (forge-std, OpenZeppelin Contracts via git submodules) — smart contract testing and deployment
