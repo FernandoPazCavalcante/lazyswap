@@ -17,6 +17,7 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/importoverlay"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/swapoverlay"
+	alertspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/alerts"
 	passpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/lazyswappass"
 	referralpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/referral"
 	settingspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/settings"
@@ -51,9 +52,17 @@ type tab int
 const (
 	tabTokens   tab = 1
 	tabReferral tab = 2
+	tabAlerts   tab = 3
 	tabSettings tab = 4
 	tabSwapBTC  tab = 5
 	tabPass     tab = 6
+)
+
+// app_config keys for the price-monitor account. The API key is stored
+// plaintext (it can only manage the watchlist — no funds, no wallet link).
+const (
+	cfgMonitorAPIKey = "monitor_api_key"
+	cfgMonitorUserID = "monitor_user_id"
 )
 
 // Model owns the main-screen state machine.
@@ -65,6 +74,7 @@ type Model struct {
 	passSvc   *passpkg.Service
 	safetySvc *safety.Service
 	apiClient *api.Client
+	monitor   *api.Monitor
 
 	// swapMode is the persisted route preference ("", "direct", "api"); the
 	// swap overlay's 't' key toggles it. lastQuoteMode records which route the
@@ -75,6 +85,7 @@ type Model struct {
 	panel    walletpanel.Model
 	tokens   tokenspanel.Model
 	referral referralpanel.Model
+	alerts   alertspanel.Model
 	settings settingspanel.Model
 	swapbtc  swapbtcpanel.Model
 	pass     passpanel.Model
@@ -122,6 +133,14 @@ func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, pa
 	c := chain.Get(chainKey)
 	passPanel := passpanel.New()
 	passPanel.SetAvailable(c.PassAddress != "", c.NativeSymbol)
+	monitorKey := ""
+	if dao != nil {
+		if v, ok, err := dao.GetConfig(cfgMonitorAPIKey); err == nil && ok {
+			monitorKey = v
+		}
+	}
+	alertsPanel := alertspanel.New()
+	alertsPanel.SetRegistered(monitorKey != "")
 	return Model{
 		dao:           dao,
 		svc:           svc,
@@ -130,10 +149,12 @@ func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, pa
 		passSvc:       passSvc,
 		safetySvc:     safety.New(),
 		apiClient:     api.New(""),
+		monitor:       api.NewMonitor("", monitorKey),
 		swapMode:      st.SwapMode,
 		panel:         walletpanel.New(),
 		tokens:        tokenspanel.New(),
 		referral:      referralpanel.New(),
+		alerts:        alertsPanel,
 		settings:      settingspanel.New(st.Slippage, chainKey, c.Name),
 		swapbtc:       swapbtcpanel.New(),
 		pass:          passPanel,
@@ -222,6 +243,7 @@ func (m *Model) SetSize(w, h int) {
 	m.panel.SetSize(leftW, bodyH)
 	m.tokens.SetSize(rightW, rightH)
 	m.referral.SetSize(rightW, rightH)
+	m.alerts.SetSize(rightW, rightH)
 	m.settings.SetSize(rightW, rightH)
 	m.swapbtc.SetSize(rightW, rightH)
 	m.pass.SetSize(rightW, rightH)
@@ -237,6 +259,7 @@ func (m *Model) applyFocusStyles() {
 	rightFocused := m.focus == focusRight
 	m.tokens.SetFocused(rightFocused && m.activeTab == tabTokens)
 	m.referral.SetFocused(rightFocused && m.activeTab == tabReferral)
+	m.alerts.SetFocused(rightFocused && m.activeTab == tabAlerts)
 	m.settings.SetFocused(rightFocused && m.activeTab == tabSettings)
 	m.swapbtc.SetFocused(rightFocused && m.activeTab == tabSwapBTC)
 	m.pass.SetFocused(rightFocused && m.activeTab == tabPass)

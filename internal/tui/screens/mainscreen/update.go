@@ -53,6 +53,9 @@ func (m Model) handleAppMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 	if next, cmd, handled := m.handleSwapBTCMsg(msg); handled {
 		return next, cmd, true
 	}
+	if next, cmd, handled := m.handleAlertsMsg(msg); handled {
+		return next, cmd, true
+	}
 	return m.handleSettingsMsg(msg)
 }
 
@@ -127,6 +130,10 @@ func (m Model) updateWalletQR(msg tea.Msg) (Model, tea.Cmd) {
 // routeToActiveTab forwards a message to the currently selected right-panel tab.
 func (m Model) routeToActiveTab(msg tea.Msg) (Model, tea.Cmd) {
 	switch m.activeTab {
+	case tabAlerts:
+		var cmd tea.Cmd
+		m.alerts, cmd = m.alerts.Update(msg)
+		return m, cmd
 	case tabSettings:
 		var cmd tea.Cmd
 		m.settings, cmd = m.settings.Update(msg)

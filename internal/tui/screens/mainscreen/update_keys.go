@@ -40,6 +40,12 @@ func (m Model) handleNormalKey(k tea.KeyMsg) (Model, tea.Cmd, bool) {
 		return next, cmd, true
 	case "r":
 		return m, m.balancesCmdForCurrent(), true
+	case "a":
+		if m.activeTab == tabTokens {
+			next, cmd := m.addSelectedTokenToAlerts()
+			return next, cmd, true
+		}
+		return m, nil, false
 	case "y":
 		next, cmd := m.copyCurrentAddress()
 		return next, cmd, true
