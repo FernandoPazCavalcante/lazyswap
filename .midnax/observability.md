@@ -1,14 +1,8 @@
 # Observability
 
-**Backend**
-- lazyswap: File-based logger only (`internal/applog` → `~/.lazyswap/lazyswap.log`). No external monitoring/tracing.
-- lazyswap-contracts: None configured.
+## Backend
+- **File-based logging** (lazyswap) — `internal/applog` writes to `~/.lazyswap/lazyswap.log`; never stdout (preserves Bubble Tea TUI)
+- **LAZYSWAP_TEST=1** routes log to `/dev/null` in tests
 
-**Frontend**
-- lazyswap-site: Cloudflare Workers built-in observability enabled (`"observability": { "enabled": true }` in `wrangler.jsonc`).
-- marketingskills, resume: None configured.
-
-**Infrastructure**
-- flagsmith-charts: Prometheus ServiceMonitor support configurable in `values.yaml` (`serviceMonitor.enabled`). No external monitoring tooling configured in the repo itself.
-- home-server: None configured. Watchtower handles automatic container image updates.
-- rinha-de-backend-2024-q1: None configured.
+## Frontend
+- **Cloudflare Workers observability** — enabled (`observability.enabled: true` in `wrangler.jsonc`)

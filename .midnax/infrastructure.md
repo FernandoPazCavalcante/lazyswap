@@ -1,24 +1,11 @@
 # Infrastructure
 
-**Cloud & Hosting**
-- Cloudflare: Workers (lazyswap-site), Pages, DNS-01 TLS, Zero Trust tunnels (home-server)
-- GitHub: Actions runners (ubuntu-latest, ubuntu-slim), Releases for artifact distribution
+**Cloudflare Workers** — primary deployment platform for lazyswap-site (Wrangler v4 runtime with nodejs_compat flag).
 
-**Container & Orchestration**
-- Docker Compose (home-server, rinha-de-backend-2024-q1); Kubernetes target with Helm (flagsmith-charts)
-- kind cluster for chart testing (flagsmith-charts)
+**EVM RPC endpoints** — lazyswap connects at runtime to public RPC endpoints for Ethereum, BSC, Sepolia, BSC Testnet (configured in `internal/chain/config.go` CHAINS map).
 
-**Managed Services**
-- Bitnami PostgreSQL, InfluxDB2 (flagsmith-charts dependencies)
-- Cloudflare Tunnels, Zerotier VPN (home-server)
+**THORchain API** — cross-chain BTC swap routing.
 
-**Local/Self-Hosted**
-- Bare-metal Linux (Arch Linux, home-server)
-- Pure local binaries (lazyswap); no cloud infra
-- Multi-chain smart contract deployment (BSC, Ethereum, Polygon, Arbitrum, Base; lazyswap-contracts)
+**Smart contract deployment** — Foundry broadcast scripts with Etherscan verification support (BSC, Ethereum, Polygon, Arbitrum, Base).
 
-**IaC & Configuration**
-- Helm charts (flagsmith-charts)
-- Docker Compose YAML (home-server, rinha-de-backend-2024-q1)
-- Wrangler config (lazyswap-site)
-- foundry.toml (lazyswap-contracts)
+**Local data storage** — SQLite (modernc/sqlite, cgo-free) for wallet CRUD; filesystem at `~/.lazyswap/` (wallets.db, lazyswap.log).
