@@ -1,17 +1,22 @@
 # Tech Stack
 
 ## Backend
-- **Go 1.26+** — lazyswap CLI/TUI; cross-compile targets: linux-x64/arm64, darwin-x64/arm64
-- **Solidity 0.8.24** — lazyswap-contracts; Foundry toolchain (forge, cast)
+- **Language:** Go 1.26+ (lazyswap core); Solidity 0.8.24 (contracts)
+- **Frameworks & libraries:**
+  - Go: Bubble Tea (TUI), OpenZeppelin Contracts (via git submodule), forge-std (tests)
+  - Solidity: OpenZeppelin Contracts (ERC-721, Ownable, ReentrancyGuard)
+- **Key packages:** AES-256-GCM + PBKDF2 encryption, SQLite (modernc/sqlite, cgo-free), GoPlus token risk API, THORchain cross-chain routing
 
 ## Frontend
-- **TypeScript** — lazyswap-site React SPA
-- **React 18** + **Vite 6** — bundler with HMR
-- **Tailwind CSS v4** (@tailwindcss/vite plugin)
-- **shadcn/ui** (Radix UI primitives) + **MUI v7**
-- **react-router v7**, **react-hook-form**, **recharts**, **react-dnd**, **lucide-react**, **motion**
-- **pnpm** — package manager (required; no npm/yarn)
+- **Language:** TypeScript
+- **Framework:** React 18
+- **Bundler:** Vite 6
+- **Styling:** Tailwind CSS v4 (`@tailwindcss/vite` plugin)
+- **Component library:** shadcn/ui (Radix UI primitives) + MUI v7
+- **Key libraries:** react-router v7, react-hook-form, recharts, react-dnd, lucide-react, motion
+- **Package manager:** pnpm (enforced; no npm/yarn)
 
 ## Infrastructure
-- **Cloudflare Workers** (Wrangler v4) — lazyswap-site deployment runtime
-- **Foundry** (forge-std, OpenZeppelin Contracts via git submodules) — smart contract testing and deployment
+- **Deployment runtime:** Cloudflare Workers (Wrangler v4)
+- **Blockchain:** EVM chains (Ethereum, BSC, Polygon, Arbitrum, Base, Sepolia); THORchain (BTC)
+- **Smart contract toolchain:** Foundry (forge, cast)
