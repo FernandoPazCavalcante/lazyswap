@@ -67,10 +67,14 @@ func TestRunSwapQuoteOnlyOverFakeRPC(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	for _, marker := range []string{"route     direct", "spend", "receive", "min recv", "fee"} {
+	for _, marker := range []string{"route     direct", "spend", "receive", "min recv"} {
 		if !strings.Contains(out, marker) {
 			t.Fatalf("quote output missing %q:\n%s", marker, out)
 		}
+	}
+	// lazyswap takes no fee — no quote surface may advertise one.
+	if strings.Contains(out, "fee") {
+		t.Fatalf("quote output must not mention a fee:\n%s", out)
 	}
 }
 

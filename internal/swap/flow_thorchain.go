@@ -36,15 +36,13 @@ func (f *Flow) GetThorchainQuote(
 	if err != nil {
 		return FlowQuote{}, err
 	}
-	gross, _ := strconv.ParseFloat(conv.TokenAmount, 64)
-	fee := CalcFee(gross)
-	netFromTokenAmount := strconv.FormatFloat(fee.NetAmount, 'f', 6, 64)
+	fromTokenAmount := conv.TokenAmount
 
 	fromAsset, err := f.thorAssetString(fromToken)
 	if err != nil {
 		return FlowQuote{}, err
 	}
-	thorAmount, err := thorchain.ToThorBaseUnits(netFromTokenAmount)
+	thorAmount, err := thorchain.ToThorBaseUnits(fromTokenAmount)
 	if err != nil {
 		return FlowQuote{}, err
 	}
@@ -70,9 +68,6 @@ func (f *Flow) GetThorchainQuote(
 		MinOutput:            quote.MinOutput,
 		Slippage:             0, // THORchain enforces slippage via the memo min-output
 		NeedsApproval:        fromToken.Address != NativeSentinel,
-		FeePercent:           fee.FeePercent,
-		FeeAmount:            strconv.FormatFloat(fee.FeeAmount, 'f', 6, 64),
-		NetFromTokenAmount:   netFromTokenAmount,
 		IsThorchain:          true,
 		ThorEstimatedSeconds: quote.EstimatedSeconds,
 		ThorFees:             quote.TotalFees,
@@ -102,15 +97,13 @@ func (f *Flow) EstimateThorchain(
 	if err != nil {
 		return FlowQuote{}, err
 	}
-	gross, _ := strconv.ParseFloat(conv.TokenAmount, 64)
-	fee := CalcFee(gross)
-	netFromTokenAmount := strconv.FormatFloat(fee.NetAmount, 'f', 6, 64)
+	fromTokenAmount := conv.TokenAmount
 
 	fromAsset, err := f.thorAssetString(fromToken)
 	if err != nil {
 		return FlowQuote{}, err
 	}
-	thorAmount, err := thorchain.ToThorBaseUnits(netFromTokenAmount)
+	thorAmount, err := thorchain.ToThorBaseUnits(fromTokenAmount)
 	if err != nil {
 		return FlowQuote{}, err
 	}
@@ -130,7 +123,6 @@ func (f *Flow) EstimateThorchain(
 				FromTokenAmount:    conv.TokenAmount,
 				FromTokenPriceLine: fmt.Sprintf("@ %s/%s", FormatUSD(conv.PricePerToken), fromToken.Symbol),
 				NeedsApproval:      fromToken.Address != NativeSentinel,
-				NetFromTokenAmount: netFromTokenAmount,
 				IsThorchain:        true,
 				ThorBelowMin:       true,
 				ThorMinTokenAmount: minTok,
@@ -151,9 +143,6 @@ func (f *Flow) EstimateThorchain(
 		EstimatedOutput:      quote.ExpectedOutput,
 		MinOutput:            quote.MinOutput,
 		NeedsApproval:        fromToken.Address != NativeSentinel,
-		FeePercent:           fee.FeePercent,
-		FeeAmount:            strconv.FormatFloat(fee.FeeAmount, 'f', 6, 64),
-		NetFromTokenAmount:   netFromTokenAmount,
 		IsThorchain:          true,
 		ThorEstimatedSeconds: quote.EstimatedSeconds,
 		ThorFees:             quote.TotalFees,
@@ -192,15 +181,13 @@ func (f *Flow) ExecuteThorchain(
 	if err != nil {
 		return failResult(fromToken, btcToken, usdAmount, err.Error())
 	}
-	gross, _ := strconv.ParseFloat(conv.TokenAmount, 64)
-	fee := CalcFee(gross)
-	netFromTokenAmount := strconv.FormatFloat(fee.NetAmount, 'f', 6, 64)
+	fromTokenAmount := conv.TokenAmount
 
 	fromAsset, err := f.thorAssetString(fromToken)
 	if err != nil {
 		return failResult(fromToken, btcToken, usdAmount, err.Error())
 	}
-	thorAmount, err := thorchain.ToThorBaseUnits(netFromTokenAmount)
+	thorAmount, err := thorchain.ToThorBaseUnits(fromTokenAmount)
 	if err != nil {
 		return failResult(fromToken, btcToken, usdAmount, err.Error())
 	}
@@ -221,7 +208,7 @@ func (f *Flow) ExecuteThorchain(
 		return failResult(fromToken, btcToken, usdAmount, err.Error())
 	}
 
-	res, err := f.sendThorSwap(ctx, executor, inbound, fromToken, netFromTokenAmount, quote.Memo)
+	res, err := f.sendThorSwap(ctx, executor, inbound, fromToken, fromTokenAmount, quote.Memo)
 	if err != nil {
 		applog.Error("swap.Flow.ExecuteThorchain failed", err)
 		return failResult(fromToken, btcToken, usdAmount, err.Error())
@@ -248,17 +235,17 @@ func (f *Flow) sendThorSwap(
 	executor *thorchain.Executor,
 	inbound thorchain.InboundAddress,
 	fromToken TokenInfo,
-	netFromTokenAmount, memo string,
+	fromTokenAmount, memo string,
 ) (thorchain.Result, error) {
 	if fromToken.Address == NativeSentinel {
-		return executor.SwapNativeToBtc(ctx, inbound.VaultAddress, netFromTokenAmount, memo)
+		return executor.SwapNativeToBtc(ctx, inbound.VaultAddress, fromTokenAmount, memo)
 	}
 	routerAddress := inbound.Router
 	if routerAddress == "" {
 		routerAddress = f.chain.RouterAddress
 	}
 	return executor.SwapErc20ToBtc(ctx, routerAddress, inbound.VaultAddress,
-		fromToken.Address, fromToken.Symbol, fromToken.Decimals, netFromTokenAmount, memo)
+		fromToken.Address, fromToken.Symbol, fromToken.Decimals, fromTokenAmount, memo)
 }
 
 // thorMin renders THORChain's recommended minimum (1e8 base units) as a

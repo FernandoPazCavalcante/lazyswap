@@ -116,8 +116,7 @@ func (m Model) previewBody() string {
 	}
 	lines := []string{
 		fmt.Sprintf("  %s ≈ %s %s %s", q.USDAmountFormatted, q.FromTokenAmount, q.FromToken.Symbol, q.FromTokenPriceLine),
-		fmt.Sprintf("  Fee (%.2f%%)    %s %s", q.FeePercent, q.FeeAmount, q.FromToken.Symbol),
-		fmt.Sprintf("  %s %s → %s BTC", q.NetFromTokenAmount, q.FromToken.Symbol, q.EstimatedOutput),
+		fmt.Sprintf("  %s %s → %s BTC", q.FromTokenAmount, q.FromToken.Symbol, q.EstimatedOutput),
 		fmt.Sprintf("  Min output: %s BTC (3%% THORchain slippage)", q.MinOutput),
 		fmt.Sprintf("  Fees: %s BTC  |  ETA: %s", q.ThorFees, eta),
 	}

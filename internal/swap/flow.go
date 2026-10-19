@@ -31,18 +31,14 @@ type FlowQuote struct {
 	USDAmount          string `json:"usdAmount"`          // raw user input, e.g. "50"
 	USDAmountFormatted string `json:"usdAmountFormatted"` // "$50.00"
 
-	FromTokenAmount    string `json:"fromTokenAmount"`    // gross from-token amount (pre-fee)
+	FromTokenAmount    string `json:"fromTokenAmount"`    // from-token amount being swapped
 	FromTokenPriceLine string `json:"fromTokenPriceLine"` // "@ $600.12/BNB"
 
-	EstimatedOutput string `json:"estimatedOutput"` // raw DEX quote for the net amount
+	EstimatedOutput string `json:"estimatedOutput"` // raw DEX quote
 	MinOutput       string `json:"minOutput"`       // estimated * (1 - slippage/100)
 
 	Slippage      float64 `json:"slippage"`
 	NeedsApproval bool    `json:"needsApproval"`
-
-	FeePercent         float64 `json:"feePercent"`
-	FeeAmount          string  `json:"feeAmount"`          // formatted, e.g. "0.000125"
-	NetFromTokenAmount string  `json:"netFromTokenAmount"` // gross - fee, formatted
 
 	// Mode is "direct" (on-chain V2 router) or "api" (backend/OpenOcean route).
 	// Empty means direct (pre-hybrid quotes).
@@ -82,7 +78,7 @@ type UsdConversion struct {
 	PricePerToken float64
 }
 
-// Flow orchestrates USD→token conversion, quoting, fee application, approval
+// Flow orchestrates USD→token conversion, quoting, approval
 // checks, and execution. Mirrors swap-flow.service.ts (THORchain excluded).
 type Flow struct {
 	chainKey string

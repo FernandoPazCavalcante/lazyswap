@@ -27,16 +27,14 @@ func (f *Flow) Quote(
 		return FlowQuote{}, err
 	}
 
-	gross, _ := strconv.ParseFloat(conv.TokenAmount, 64)
-	fee := CalcFee(gross)
-	netFromTokenAmount := strconv.FormatFloat(fee.NetAmount, 'f', 6, 64)
+	fromTokenAmount := conv.TokenAmount
 
 	fromAddr := f.ResolveAddress(fromToken.Address)
 	toAddr := f.ResolveAddress(toToken.Address)
 
 	provider := dex.NewUniswapV2(f.client, f.chainKey)
 	quoteSvc := NewQuote(provider)
-	dexQuote, err := quoteSvc.Get(ctx, fromAddr, toAddr, netFromTokenAmount)
+	dexQuote, err := quoteSvc.Get(ctx, fromAddr, toAddr, fromTokenAmount)
 	if err != nil {
 		return FlowQuote{}, err
 	}
@@ -60,8 +58,5 @@ func (f *Flow) Quote(
 		MinOutput:          minOutput,
 		Slippage:           slippage,
 		NeedsApproval:      needsApproval,
-		FeePercent:         fee.FeePercent,
-		FeeAmount:          strconv.FormatFloat(fee.FeeAmount, 'f', 6, 64),
-		NetFromTokenAmount: netFromTokenAmount,
 	}, nil
 }

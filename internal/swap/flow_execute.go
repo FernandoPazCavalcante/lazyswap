@@ -36,23 +36,21 @@ func (f *Flow) Execute(
 		return failResult(fromToken, toToken, usdAmount, err.Error())
 	}
 
-	gross, _ := strconv.ParseFloat(conv.TokenAmount, 64)
-	fee := CalcFee(gross)
-	netFromTokenAmount := strconv.FormatFloat(fee.NetAmount, 'f', 6, 64)
+	fromTokenAmount := conv.TokenAmount
 
 	fromAddr := f.ResolveAddress(fromToken.Address)
 	toAddr := f.ResolveAddress(toToken.Address)
 
 	provider := dex.NewUniswapV2(f.client, f.chainKey)
 	quoteSvc := NewQuote(provider)
-	dexQuote, err := quoteSvc.Get(ctx, fromAddr, toAddr, netFromTokenAmount)
+	dexQuote, err := quoteSvc.Get(ctx, fromAddr, toAddr, fromTokenAmount)
 	if err != nil {
 		return failResult(fromToken, toToken, usdAmount, err.Error())
 	}
 	estimated, _ := strconv.ParseFloat(dexQuote.EstimatedOutput, 64)
 	minOutput := strconv.FormatFloat(estimated*(1-slippage/100), 'f', 6, 64)
 
-	result, err := executor.ExecuteFullSwap(ctx, fromToken.Address, toToken.Address, netFromTokenAmount, minOutput, slippage)
+	result, err := executor.ExecuteFullSwap(ctx, fromToken.Address, toToken.Address, fromTokenAmount, minOutput, slippage)
 	if err != nil {
 		applog.Error("swap.Flow.Execute failed", err)
 		return failResult(fromToken, toToken, usdAmount, err.Error())

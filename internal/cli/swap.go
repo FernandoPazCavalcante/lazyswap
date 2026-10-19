@@ -105,7 +105,7 @@ func parseSwapArgs(args []string) (swapArgs, error) {
 	noSafety := fs.Bool("no-safety", false, "skip the pre-swap token risk check")
 	safetyBlock := fs.Bool("safety-block", false, "refuse to swap when the risk check comes back HIGH")
 	apiMode := fs.Bool("api", false, "route via the lazyswap API (OpenOcean best rates; needs a LazySwap Pass)")
-	directMode := fs.Bool("direct", false, "route directly via the on-chain V2 router (no fee, no auth)")
+	directMode := fs.Bool("direct", false, "route directly via the on-chain V2 router (no auth)")
 	quoteOnly := fs.Bool("quote-only", false, "print the quote (and risk check) then exit without executing")
 
 	// stdlib flag stops at the first positional; loop so flags may appear before,
@@ -320,10 +320,9 @@ func fprintQuote(w io.Writer, c chain.Config, walletAddr string, q swap.FlowQuot
 		_, _ = fmt.Fprintf(w, "  impact    %s\n", q.PriceImpact)
 	}
 	_, _ = fmt.Fprintf(w, "  spend     %s of %s (%s %s) %s\n",
-		q.USDAmountFormatted, q.FromToken.Symbol, q.NetFromTokenAmount, q.FromToken.Symbol, q.FromTokenPriceLine)
+		q.USDAmountFormatted, q.FromToken.Symbol, q.FromTokenAmount, q.FromToken.Symbol, q.FromTokenPriceLine)
 	_, _ = fmt.Fprintf(w, "  receive   ~%s %s\n", q.EstimatedOutput, q.ToToken.Symbol)
 	_, _ = fmt.Fprintf(w, "  min recv  %s %s (slippage %.2f%%)\n", q.MinOutput, q.ToToken.Symbol, q.Slippage)
-	_, _ = fmt.Fprintf(w, "  fee       %s %s (%.2f%%)\n", q.FeeAmount, q.FromToken.Symbol, q.FeePercent)
 	if q.NeedsApproval {
 		_, _ = fmt.Fprintf(w, "  note      token approval will be sent first\n")
 	}
