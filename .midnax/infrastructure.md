@@ -1,11 +1,13 @@
 # Infrastructure
 
-**Cloudflare Workers** — primary deployment platform for lazyswap-site (Wrangler v4 runtime with nodejs_compat flag).
+**Cloud provider** — Cloudflare (Workers for frontend SPA)
 
-**EVM RPC endpoints** — lazyswap connects at runtime to public RPC endpoints for Ethereum, BSC, Sepolia, BSC Testnet (configured in `internal/chain/config.go` CHAINS map).
+**Blockchain** — EVM chains (Ethereum, BSC, Polygon, Arbitrum, Base) via public RPC endpoints; THORchain API for cross-chain BTC swaps
 
-**THORchain API** — cross-chain BTC swap routing.
+**Container/orchestration** — None; lazyswap is a pure local binary (no server, no backend container)
 
-**Smart contract deployment** — Foundry broadcast scripts with Etherscan verification support (BSC, Ethereum, Polygon, Arbitrum, Base).
+**IaC** — Foundry (forge) for smart contract deployment; Wrangler v4 for Cloudflare Workers
 
-**Local data storage** — SQLite (modernc/sqlite, cgo-free) for wallet CRUD; filesystem at `~/.lazyswap/` (wallets.db, lazyswap.log).
+**Managed services** — Cloudflare Workers (frontend hosting); public EVM RPC endpoints; THORchain API; GoPlus token risk API (cached, fail-closed); OpenOcean swap routing (API mode, mainnets only)
+
+**Data** — SQLite (modernc/sqlite, cgo-free) for wallet DAO; ~/.lazyswap/ data directory (wallets.db, lazyswap.log)
