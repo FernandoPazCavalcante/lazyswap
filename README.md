@@ -185,10 +185,26 @@ go test ./...            # run the test suite
 
 ## Contributing
 
-Found a bug or want a feature? [Open an issue](https://github.com/FernandoPazCavalcante/lazyswap/issues).
-Pull requests are welcome — the project follows
-[Conventional Commits](https://www.conventionalcommits.org/) (semantic-release
-drives versioning off the commit history).
+Contributions are welcome, and the repo is set up so you can work on a wallet
+without risking any money: `go test ./...` runs against a fake EVM JSON-RPC
+server, and no workflow triggered by a pull request has access to a wallet.
+
+```bash
+make setup   # installs the pinned lint + mutation tools
+make gate    # the same gate CI runs on your PR
+```
+
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — review cadence, the AI policy, the
+  open-core boundary, DCO, and where PRs are welcome (and where to open an
+  issue first).
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — how the three front-ends, the
+  services and the chain layer fit together. The two easiest places to
+  contribute are a new DEX adapter (`internal/dex` is 76 lines) and a new chain
+  (`internal/chain/config.go` is one entry per chain).
+- **[good first issues](https://github.com/FernandoPazCavalcante/lazyswap/contribute)**
+  — each one names the file to start in.
+
+I review PRs on weekends; expect a decision within a week.
 
 ## Author
 
