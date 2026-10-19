@@ -95,8 +95,6 @@ func QuoteFlow(
 	}
 
 	usd, _ := strconv.ParseFloat(usdAmount, 64)
-	gross, _ := strconv.ParseFloat(conv.TokenAmount, 64)
-	feeAmount := gross * qr.FeePercent / 100
 
 	return swap.FlowQuote{
 		Mode:               "api",
@@ -109,9 +107,6 @@ func QuoteFlow(
 		EstimatedOutput:    formatBase(qr.OutAmount, to.Decimals),
 		MinOutput:          formatBase(qr.MinOutAmount, to.Decimals),
 		Slippage:           slippage,
-		FeePercent:         qr.FeePercent,
-		FeeAmount:          strconv.FormatFloat(feeAmount, 'f', 6, 64),
-		NetFromTokenAmount: conv.TokenAmount,
 		PriceImpact:        qr.PriceImpact,
 	}, nil
 }

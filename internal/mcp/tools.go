@@ -45,7 +45,7 @@ func (s *server) register(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{Name: "get_balances",
 		Description: "Fetch token balances (with USD values) for a wallet on a chain."}, s.getBalances)
 	sdk.AddTool(srv, &sdk.Tool{Name: "swap_quote",
-		Description: "Quote a swap in USD terms: token amounts, estimated/min output, fee. Read-only, does not trade."}, s.swapQuote)
+		Description: "Quote a swap in USD terms: token amounts, estimated/min output. Read-only, does not trade."}, s.swapQuote)
 	sdk.AddTool(srv, &sdk.Tool{Name: "get_settings",
 		Description: "Read the persisted settings: chain, slippage, default wallet."}, s.getSettings)
 	sdk.AddTool(srv, &sdk.Tool{Name: "set_settings",
@@ -194,7 +194,7 @@ type swapIn struct {
 	Slippage float64 `json:"slippage,omitempty" jsonschema:"slippage percent; omit for the configured default"`
 	Wallet   string  `json:"wallet,omitempty" jsonschema:"wallet address (default: configured default wallet)"`
 	Chain    string  `json:"chain,omitempty" jsonschema:"chain key (default: configured chain)"`
-	Mode     string  `json:"mode,omitempty" jsonschema:"swap route: direct (on-chain V2 router, no fee) or api (OpenOcean best rate, 1% fee, needs LazySwap Pass); default: configured"`
+	Mode     string  `json:"mode,omitempty" jsonschema:"swap route: direct (on-chain V2 router) or api (OpenOcean best rate, needs LazySwap Pass); default: configured"`
 }
 
 // resolveSwap maps a swapIn to everything a quote or execute needs.

@@ -77,14 +77,17 @@ func TestQuoteEndToEnd(t *testing.T) {
 	if q.USDAmountFormatted != "$5.00" {
 		t.Fatalf("usd formatted = %q", q.USDAmountFormatted)
 	}
-	// Fee (0.15%) reduces the net input; estimated output mirrors net at 1:1.
-	if q.FeePercent == 0 || q.FeeAmount == "0.000000" {
-		t.Fatalf("fee missing: %+v", q)
+	// lazyswap takes no fee: the full input is quoted against the DEX, so the
+	// 1:1 fake pool hands it straight back. A reintroduced deduction (the old
+	// 0.15% SwapFeePercent was 15x this tolerance) fails here.
+	in, okIn := new(big.Float).SetString(q.FromTokenAmount)
+	out, okOut := new(big.Float).SetString(q.EstimatedOutput)
+	if !okIn || !okOut {
+		t.Fatalf("unparseable amounts: in=%q out=%q", q.FromTokenAmount, q.EstimatedOutput)
 	}
-	net, _ := new(big.Float).SetString(q.NetFromTokenAmount)
-	gross, _ := new(big.Float).SetString(q.FromTokenAmount)
-	if net.Cmp(gross) >= 0 {
-		t.Fatalf("net %v must be < gross %v", net, gross)
+	diff := new(big.Float).Abs(new(big.Float).Sub(in, out))
+	if diff.Cmp(new(big.Float).Mul(in, big.NewFloat(0.0001))) > 0 {
+		t.Fatalf("1:1 pool must return the full input untaxed: in=%v out=%v", in, out)
 	}
 	if q.MinOutput >= q.EstimatedOutput {
 		t.Fatalf("min %q must be < estimated %q at 0.5%% slippage", q.MinOutput, q.EstimatedOutput)

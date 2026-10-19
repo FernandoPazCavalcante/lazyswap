@@ -75,7 +75,7 @@ func (m Model) previewBody() string {
 		return theme.Dim().Render("Loading quote…")
 	}
 	q := m.quote
-	route := "direct — on-chain V2 router, no fee"
+	route := "direct — on-chain V2 router"
 	if q.Mode == "api" {
 		route = "api — OpenOcean best rate, MEV protected"
 	}
@@ -83,8 +83,6 @@ func (m Model) previewBody() string {
 		fmt.Sprintf("Route          %s", route),
 		fmt.Sprintf("USD            %s", q.USDAmountFormatted),
 		fmt.Sprintf("From           %s %s   %s", q.FromTokenAmount, q.FromToken.Symbol, q.FromTokenPriceLine),
-		fmt.Sprintf("Fee (%.2f%%)    %s %s", q.FeePercent, q.FeeAmount, q.FromToken.Symbol),
-		fmt.Sprintf("Net swap input %s %s", q.NetFromTokenAmount, q.FromToken.Symbol),
 		fmt.Sprintf("Estimated      %s %s", q.EstimatedOutput, q.ToToken.Symbol),
 		fmt.Sprintf("Min received   %s %s   (slippage %.2f%%)", q.MinOutput, q.ToToken.Symbol, q.Slippage),
 	}

@@ -138,9 +138,9 @@ func TestGoldenQuoteOutput(t *testing.T) {
 	c := chain.Get("bsc")
 	direct := swap.FlowQuote{
 		FromToken: swap.TokenInfo{Symbol: "BNB"}, ToToken: swap.TokenInfo{Symbol: "USDT"},
-		USDAmountFormatted: "$5.00", FromTokenAmount: "0.008300", NetFromTokenAmount: "0.008288",
+		USDAmountFormatted: "$5.00", FromTokenAmount: "0.008300",
 		FromTokenPriceLine: "@ $602.42/BNB", EstimatedOutput: "4.985000", MinOutput: "4.960075",
-		Slippage: 0.5, FeePercent: 0.15, FeeAmount: "0.000012", NeedsApproval: true,
+		Slippage: 0.5, NeedsApproval: true,
 	}
 	var buf bytes.Buffer
 	fprintQuote(&buf, c, "0xA502F4896E1b2B93080EabfFC60018b8D089b872", direct)
@@ -149,7 +149,6 @@ func TestGoldenQuoteOutput(t *testing.T) {
 	api := direct
 	api.Mode = "api"
 	api.PriceImpact = "0.08%"
-	api.FeePercent = 1
 	api.NeedsApproval = false
 	buf.Reset()
 	fprintQuote(&buf, c, "0xA502F4896E1b2B93080EabfFC60018b8D089b872", api)
