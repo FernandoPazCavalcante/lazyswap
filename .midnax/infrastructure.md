@@ -1,13 +1,17 @@
 # Infrastructure
 
-**Cloud provider** — Cloudflare (Workers for frontend SPA)
+**Cloud provider:** Cloudflare (Workers for frontend deployment)
 
-**Blockchain** — EVM chains (Ethereum, BSC, Polygon, Arbitrum, Base) via public RPC endpoints; THORchain API for cross-chain BTC swaps
+**Blockchain networks:** EVM chains (Ethereum, BSC, BSC Testnet, Sepolia) via public JSON-RPC endpoints; THORchain for cross-chain BTC swaps
 
-**Container/orchestration** — None; lazyswap is a pure local binary (no server, no backend container)
+**Container/orchestration:** None — pure local binary (lazyswap) and serverless (Cloudflare Workers)
 
-**IaC** — Foundry (forge) for smart contract deployment; Wrangler v4 for Cloudflare Workers
+**Key managed services:**
+- Cloudflare Workers (frontend hosting + routing)
+- Public EVM RPC endpoints (chain-specific, configured in internal/chain/config.go)
+- THORchain API (cross-chain swap routing)
+- GoPlus API (token risk assessment)
+- OpenOcean aggregator (API swap route; backend not deployed as of v0.1.0)
+- Etherscan / BSCScan / PolygonScan / Arbiscan / BaseScan (block explorer APIs, contract verification)
 
-**Managed services** — Cloudflare Workers (frontend hosting); public EVM RPC endpoints; THORchain API; GoPlus token risk API (cached, fail-closed); OpenOcean swap routing (API mode, mainnets only)
-
-**Data** — SQLite (modernc/sqlite, cgo-free) for wallet DAO; ~/.lazyswap/ data directory (wallets.db, lazyswap.log)
+**IaC:** None documented; Foundry scripts (Deploy.s.sol, DeployPass.s.sol) handle smart contract deployment

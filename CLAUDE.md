@@ -29,6 +29,7 @@ go test -cover ./...              # with coverage
 bash scripts/build-release.sh     # CGO_ENABLED=0; targets: linux-x64/arm64, darwin-x64/arm64
 
 # Quality gates (see REVIEW.md for thresholds; CI enforces on every PR)
+make setup                   # one-time: installs pinned golangci-lint + gremlins into $GOBIN
 make gate                    # lint + coverage >= 70% (ex-TUI) — the PR-gate mirror
 make lint                    # golangci-lint (cyclomatic <= 15, funcs <= 80 lines, files <= 500)
 make test                    # LAZYSWAP_TEST=1 go test -race ./...
@@ -99,24 +100,27 @@ main.go
 | `internal/cli/` | Non-interactive CLI commands |
 | `internal/mcp/` | MCP stdio server — read-only tools by default; `swap_execute`/`buy_pass` only with `--allow-trading` + `--max-usd` cap, password via `LAZYSWAP_PASSWORD` env only |
 | `internal/safety/` | Pre-swap token risk check (GoPlus). Fail-closed: missing data/API failure → "unknown", never "safe". Testnets are always unknown (GoPlus has no coverage) |
-| `internal/api/` | Backend client for hybrid swap. SIWE JWT lives in memory only; swap tx is signed/broadcast locally (`swap.Flow.ExecuteRawTx`). Also contains `Monitor` — bearer-key client for the price-monitor watchlist (no SIWE, no wallet link; key stored plaintext in `app_config` as `monitor_api_key`). API route needs `chain.Config.OpenOceanKey` (mainnets only); every front-end falls back to direct when the API is unavailable |
+| `internal/api/` | Backend client for hybrid swap. SIWE JWT lives in memory only; swap tx is signed/broadcast locally (`swap.Flow.ExecuteRawTx`). Also contains `Monitor` — bearer-key client for the price-monitor watchlist (no SIWE, no wallet link; key stored plaintext in `app_config` as `monitor_api_key`). API route needs `chain.Config.OpenOceanKey` (mainnets only); every front-end falls back to direct when the API is unavailable. **Note: backend host not deployed as of v0.1.0.** |
 | `internal/wallet/` | Wallet CRUD + SQLite DAO. `pick.go` — `Pick()` resolves which wallet to use (explicit addr > default > only wallet) |
 | `internal/crypto/` | AES-256-GCM + PBKDF2 encryption |
 | `internal/pass/` | LazySwapPass ERC-721 (deployed on `bsc_testnet` only) |
 | `internal/paths/` | Filesystem path resolution |
 | `internal/applog/` | File-based logger |
-| `internal/swap/` | Split: `flow.go` (Flow struct + ConvertUsdToTokenAmount), `flow_quote.go` (Flow.Quote), `flow_execute.go` (Flow.Execute), `flow_thorchain.go` (GetThorchainQuote/EstimateThorchain), `rawtx.go` (RawTx + ExecuteRawTx), `resolve.go` (ResolveToken/AvailableSymbols), `executor.go`, `fee.go` |
+| `internal/swap/` | Split: `flow.go` (Flow struct + ConvertUsdToTokenAmount), `flow_quote.go` (Flow.Quote), `flow_execute.go` (Flow.Execute), `flow_thorchain.go` (GetThorchainQuote/EstimateThorchain), `rawtx.go` (RawTx + ExecuteRawTx), `resolve.go` (ResolveToken/AvailableSymbols), `executor.go`. No fee logic — see `docs/FEES.md`. |
 | `internal/tui/panels/alerts/` | Alerts tab (tab 3) — token price-monitor watchlist; keys: `j`/`k` navigate, `x` remove, `t` Telegram link, `R` register. Tokens added from Tokens tab with `a` |
 | `internal/tui/panels/referral/` | Referral tab (tab 2) — display-only; shows referral code, earnings, claimable USD |
 | `internal/tui/overlays/swapoverlay/` | Split: `swap.go` (Model/Update), `items.go` (Item + list builders), `view.go` (View) |
 | `internal/tui/panels/swapbtc/` | Split: `panel.go` (Model/state), `messages.go` (all message types), `update.go` (Update/handleKey), `view.go` (View) |
 | `e2e/` | End-to-end tests (build tag `e2e`): CLI quote, TUI smoke, funded swap |
 | `internal/testrpc/` | Fake EVM JSON-RPC server for unit tests (getAmountsOut/balanceOf/allowance + tx lifecycle). Configure `RateNum`/`RateDen` for pricing, `Allowance`, `NativeBalance`, `TokenBalance`, `NoLiquidity`, `RevertTx`. Excluded from coverage denominator |
-| `internal/cli/testdata/` | Golden files for CLI output; regenerate with `-update` flag |
+| `internal/cli/testdata/` | Golden files for CLI output; regenerate with `go test ./internal/cli/ -update` flag |
 | `scripts/build-release.sh` | Cross-compile release tarballs → `dist/` |
 | `scripts/coverage-gate.sh` | Coverage gate script: ≥ 70% ex-TUI and ex-testrpc |
-| `Makefile` | Local dev targets: `build`, `lint`, `test`, `cover`, `e2e`, `mutate`, `gate` |
+| `Makefile` | Local dev targets: `build`, `setup`, `lint`, `test`, `cover`, `e2e`, `mutate`, `gate` |
 | `REVIEW.md` | PR review checklist and gate thresholds |
+| `ARCHITECTURE.md` | Package map, the two contribution seams (add a DEX / add a chain), testrpc pattern |
+| `CONTRIBUTING.md` | Review cadence, AI policy, open-core boundary, DCO sign-off requirement |
+| `docs/FEES.md` | **Fee policy SSOT.** lazyswap takes no fee; DEX pool fees and THORchain fees documented here |
 | `.releaserc.json` | semantic-release config |
 | `.golangci.yml` | golangci-lint config (standard linters + cyclop ≤15, funlen ≤80, revive file-length ≤500) |
 | `.gremlins.yaml` | Mutation-testing config (excludes `_test.go`, `internal/tui/`, `e2e/`, `main.go`) |
@@ -133,8 +137,14 @@ main.go
 - `chain.Config.OpenOceanKey` is non-empty only on mainnets (`eth`, `bsc`); empty = API swap mode unavailable on that chain.
 - `LAZYSWAP_RPC_URL` env overrides every chain's RPC endpoint at runtime (used by tests and CI).
 
+### Fees
+- **lazyswap takes no fee.** The full input amount reaches the router. `docs/FEES.md` is the single source of truth — if anything else disagrees, `docs/FEES.md` is right and the other place is a bug.
+- `internal/swap/fee.go` and `CalcFee`/`SwapFeePercent`/`FeeBreakdown` **no longer exist** (deleted). `FlowQuote` has no `FeePercent`, `FeeAmount`, or `NetFromTokenAmount` fields.
+- The old 0.15% `SwapFeePercent` deduction was removed. A regression test in `internal/swap/flow_rpc_test.go` asserts a 1:1 pool returns the full input untaxed; `internal/cli/swap_run_test.go` asserts no quote surface mentions a fee.
+- Users pay: network gas (to validators), DEX pool fee (0.30% Uniswap V2 / 0.25% PancakeSwap V2, charged by the router, already in the quoted output), and THORchain network + outbound fees (shown in BTC quote). THORchain affiliate fee is 0 bps (`AffiliateBPS` in `internal/thorchain/config.go`).
+
 ### Swap routing (hybrid)
-- Two routes: **direct** (on-chain V2 router, no fee) and **api** (lazyswap backend → OpenOcean, MEV-protected, 1% fee, needs a LazySwapPass).
+- Two routes: **direct** (on-chain V2 router, no auth) and **api** (lazyswap backend → OpenOcean, MEV-protected, needs a LazySwapPass). **The backend is not deployed as of v0.1.0** — the API route exists in code but cannot function.
 - The active route is persisted in `settings.SwapMode` (`""` / `"direct"` / `"api"`). The TUI swap overlay's `t` key toggles it; `lazyswap config set-swap-mode` sets it from CLI.
 - `mainscreen.Model` tracks `swapMode` (persisted preference) and `lastQuoteMode` (route that produced the confirmed quote) — execution always follows `lastQuoteMode`.
 - `FlowQuote.Mode` (`"direct"` or `"api"`) and `FlowQuote.PriceImpact` (API only) are JSON-tagged — they are part of the MCP/API surface; do not rename without updating MCP tool schemas.
@@ -179,6 +189,11 @@ main.go
 - `master` → `beta` prereleases; `stable` → full releases.
 - **Never commit:** compiled binary (`lazyswap`), `dist/`, `*.db`, `*.log`, `.claude/`.
 
+### Contributing
+- Run `make setup` once on a fresh clone to install pinned tools (`golangci-lint v2.15.0`, `gremlins v0.5.0`). Then `make gate` mirrors the CI PR gate exactly.
+- DCO sign-off required (`git commit -s`). No CLA.
+- See `CONTRIBUTING.md` for review cadence, AI policy, and open-core boundary. See `ARCHITECTURE.md` for the two easiest contribution seams (new DEX adapter in `internal/dex`; new chain in `internal/chain/config.go`).
+
 ---
 
 ## CI/CD
@@ -186,7 +201,7 @@ main.go
 Three GitHub Actions workflows:
 
 **`.github/workflows/ci.yml`** — runs on every PR and push to `master`:
-1. `lint` — `golangci-lint` (config: `.golangci.yml`).
+1. `lint` — `golangci-lint v2.15.0` (config: `.golangci.yml`).
 2. `test` — coverage gate ≥ 70% ex-TUI (`scripts/coverage-gate.sh`); uploads `coverage.out` artifact.
 3. `e2e` (needs `test`) — `go test -tags e2e -race ./e2e/...` with `LAZYSWAP_TEST=1`; funded swap self-skips (no `LAZYSWAP_E2E_MNEMONIC`).
 4. `mutation-report` — report-only (`continue-on-error: true`); runs gremlins, posts efficacy to job summary; never blocks.
@@ -214,4 +229,4 @@ See also `.midnax/ci-cd.md` for org-wide CI/CD context.
 
 ## LazySwapPass (ERC-721)
 
-`internal/pass` implements on-chain mint + validity/expiry reads for the LazySwapPass NFT. Surfaced as TUI tab 6 ("Lazyswap Pass"). Currently deployed on `bsc_testnet` only (`chain.Config.PassAddress`). Empty `PassAddress` = feature is inert on that chain. Required for the API swap route.
+`internal/pass` implements on-chain mint + validity/expiry reads for the LazySwapPass NFT. Surfaced as TUI tab 6 ("Lazyswap Pass"). Currently deployed on `bsc_testnet` only (`chain.Config.PassAddress`). Empty `PassAddress` = feature is inert on that chain. Required for the API swap route (which is itself not deployed as of v0.1.0).
