@@ -78,13 +78,25 @@ To let an agent actually execute swaps, opt in explicitly:
 
 ```bash
 eval "$(lazyswap set password)"   # exports LAZYSWAP_PASSWORD without touching your shell history
-lazyswap mcp --allow-trading --max-usd 20 --chain bsc
+lazyswap mcp --allow-trading --max-usd 20 --max-usd-total 60 --chain bsc
 ```
 
-- `--allow-trading` registers the `swap_execute` / `buy_pass` tools; without it
-  they don't exist, so a prompt-injected agent has nothing to call.
-- `--max-usd` is a code-enforced per-swap cap (required with trading).
+- `--allow-trading` registers the `swap_execute` tool; without it the tool does
+  not exist, so an agent acting on an injected instruction has nothing to call.
+- `--max-usd` is a code-enforced **per-swap** cap (required with trading).
+- `--max-usd-total` is the **cumulative** budget for the whole server run, and
+  it is the control that matters. A per-swap cap on its own is a rate limit, not
+  a budget: an agent can call a $20 swap in a loop. The budget is booked before
+  signing, so provoking failures cannot be used to retry past it. It defaults to
+  `--max-usd` — i.e. **one swap** — so the conservative behaviour is what you
+  get without thinking about it.
 - `--chain` optionally restricts trading to an allowlist of chains.
+- Every `swap_execute` attempt — allowed, refused or failed — is appended to
+  `~/.lazyswap/lazyswap.log` with the amount and the remaining budget, so you
+  can audit what an agent did after the fact.
+- Tools carry MCP annotations: the read-only ones are marked `readOnlyHint` and
+  `swap_execute` is marked `destructiveHint`, which is what makes a well-behaved
+  host prompt a human before it moves funds.
 - The wallet password comes from the `LAZYSWAP_PASSWORD` environment only —
   it is never a tool parameter, so it cannot be echoed back through a tool
   call. Note the agent host's process environment is inside the trust

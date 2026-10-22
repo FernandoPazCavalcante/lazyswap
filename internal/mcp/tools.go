@@ -10,6 +10,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
@@ -35,23 +36,46 @@ const explorerAPIKeyEnv = "LAZYSWAP_EXPLORER_API_KEY"
 // register adds every tool to srv. Trading tools (swap_execute, buy_pass) are
 // registered only when Options.AllowTrading is set — absent tools cannot be
 // called by a prompt-injected agent.
+// readOnly / destructive build the annotation blocks. The hints are not
+// decoration: MCP hosts use them to decide auto-permissions, so readOnlyHint
+// is what lets a balance lookup run without a prompt, and destructiveHint is
+// what makes the host ask a human before a swap.
+func readOnly(title string) *sdk.ToolAnnotations {
+	return &sdk.ToolAnnotations{Title: title, ReadOnlyHint: true}
+}
+
+func destructive(title string) *sdk.ToolAnnotations {
+	yes := true
+	return &sdk.ToolAnnotations{Title: title, DestructiveHint: &yes}
+}
+
 func (s *server) register(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{Name: "list_chains",
+		Annotations: readOnly("List supported chains"),
 		Description: "List supported chains with their swappable token symbols."}, s.listChains)
 	sdk.AddTool(srv, &sdk.Tool{Name: "get_wallets",
+		Annotations: readOnly("List wallet addresses"),
 		Description: "List wallet addresses (never private keys)."}, s.getWallets)
 	sdk.AddTool(srv, &sdk.Tool{Name: "get_balances",
+		Annotations: readOnly("Fetch token balances"),
 		Description: "Fetch token balances (with USD values) for a wallet on a chain."}, s.getBalances)
 	sdk.AddTool(srv, &sdk.Tool{Name: "swap_quote",
+		Annotations: readOnly("Quote a swap"),
 		Description: "Quote a swap in USD terms: token amounts, estimated/min output. Read-only, does not trade."}, s.swapQuote)
 	sdk.AddTool(srv, &sdk.Tool{Name: "get_settings",
+		Annotations: readOnly("Read settings"),
 		Description: "Read the persisted settings: chain, slippage, default wallet."}, s.getSettings)
 	sdk.AddTool(srv, &sdk.Tool{Name: "set_settings",
+		Annotations: &sdk.ToolAnnotations{Title: "Update settings", IdempotentHint: true},
 		Description: "Update persisted settings: default chain, slippage percent, default wallet."}, s.setSettings)
 
 	if s.opts.AllowTrading {
 		sdk.AddTool(srv, &sdk.Tool{Name: "swap_execute",
-			Description: fmt.Sprintf("Execute an on-chain swap. Capped at $%.2f per swap. Quotes first via swap_quote are recommended.", s.opts.MaxUSD)}, s.swapExecute)
+			Annotations: destructive("Execute an on-chain swap (moves funds)"),
+			Description: fmt.Sprintf(
+				"Execute an on-chain swap. Irreversible: it signs and broadcasts a transaction. "+
+					"Capped at $%.2f per swap and $%.2f cumulatively for this server run. "+
+					"Quote first with swap_quote.", s.opts.MaxUSD, s.budget())}, s.swapExecute)
 	}
 }
 
@@ -261,8 +285,19 @@ func (s *server) swapExecute(ctx context.Context, req *sdk.CallToolRequest, in s
 	// Code-enforced guardrails: a prompt-injected agent cannot exceed the cap
 	// or leave the allowlisted chains.
 	if in.USD > s.opts.MaxUSD {
-		return nil, swap.FlowResult{}, fmt.Errorf("refused: $%v exceeds the --max-usd cap of $%v", in.USD, s.opts.MaxUSD)
+		applog.Infof("mcp swap_execute REFUSED (per-swap cap) usd=%v cap=%v", in.USD, s.opts.MaxUSD)
+		return nil, swap.FlowResult{}, fmt.Errorf("refused: $%v exceeds the --max-usd per-swap cap of $%v", in.USD, s.opts.MaxUSD)
 	}
+	// Cumulative budget: the control that makes the cap a budget rather than a
+	// rate limit. Booked before signing, so a loop cannot outrun it.
+	remaining, ok := s.reserve(in.USD)
+	if !ok {
+		applog.Infof("mcp swap_execute REFUSED (budget exhausted) usd=%v remaining=%v", in.USD, remaining)
+		return nil, swap.FlowResult{}, fmt.Errorf(
+			"refused: $%v exceeds the remaining session budget of $%v (--max-usd-total $%v, already spent $%v)",
+			in.USD, remaining, s.budget(), s.budget()-remaining)
+	}
+	applog.Infof("mcp swap_execute allowed usd=%v remaining budget=%v", in.USD, remaining)
 	if !s.tradingChainAllowed(key) {
 		return nil, swap.FlowResult{}, fmt.Errorf("refused: trading on %q is not in the --chain allowlist %v", key, s.opts.Chains)
 	}
@@ -288,8 +323,10 @@ func (s *server) swapExecute(ctx context.Context, req *sdk.CallToolRequest, in s
 
 	res := f.Execute(ctx, w.PrivateKey, from, to, usd, slip)
 	if !res.Success {
+		applog.Infof("mcp swap_execute failed usd=%v err=%s", in.USD, res.Err)
 		return nil, swap.FlowResult{}, fmt.Errorf("swap failed: %s", res.Err)
 	}
+	applog.Infof("mcp swap_execute ok usd=%v tx=%s remaining budget=%v", in.USD, res.TxHash, remaining)
 	return nil, res, nil
 }
 

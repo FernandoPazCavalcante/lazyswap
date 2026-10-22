@@ -93,6 +93,25 @@ There is no revert: a wrong address is an unrecoverable send.
   (`internal/thorchain/config.go:22`). **Open.**
 - It is the least-covered package in the repo. See issue #14.
 
+### AI agents (the MCP server)
+
+The server is read-only by default: `swap_execute` is not registered at all
+without `--allow-trading`, and the wallet password is read from the environment
+rather than accepted as a tool parameter, so it cannot be echoed back through a
+tool call. The agent host's process environment is inside the trust boundary.
+
+`--max-usd` bounds a single swap and `--max-usd-total` bounds the whole run,
+defaulting to one swap's worth. The cumulative budget is the control that
+matters — a per-swap cap on its own is a rate limit, and an agent acting on an
+injected instruction can call it in a loop. Budget is booked before signing, so
+a failing swap still consumes it; that is deliberate, so failures cannot be used
+to retry past the ceiling.
+
+Residual risk, stated plainly: the USD figure is derived from the chain's own
+pool price (see Privacy, below), so a thin or manipulated pool can move more
+value than the stated cap implies. Every attempt is logged to
+`~/.lazyswap/lazyswap.log` with the remaining budget.
+
 ### Privacy
 
 Not a vulnerability, but undisclosed is as bad as untrue:

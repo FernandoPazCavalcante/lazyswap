@@ -76,10 +76,11 @@ swap flags:
   --quote-only         print the quote (and risk check) then exit without executing
 
 mcp flags:
-  --allow-trading      register the swap_execute tool (default: read-only)
-  --max-usd <usd>      per-swap USD cap, required with --allow-trading
-  --chain <keys>       comma-separated chain allowlist for trading tools
-  --allow-risky        let swap_execute buy HIGH-risk tokens (default: refuse)
+  --allow-trading        register the swap_execute tool (default: read-only)
+  --max-usd <usd>        per-swap USD cap, required with --allow-trading
+  --max-usd-total <usd>  cumulative budget for the whole run (default: --max-usd)
+  --chain <keys>         comma-separated chain allowlist for trading tools
+  --allow-risky          let swap_execute buy HIGH-risk tokens (default: refuse)
 
 Example:
   lazyswap swap 0.50 BNB USDT     # $0.50 of BNB into USDT on the default chain

@@ -135,3 +135,54 @@ func TestSwapExecuteRefusesDisallowedChain(t *testing.T) {
 		t.Fatalf("expected allowlist refusal, got %v", err)
 	}
 }
+
+func TestBudgetDefaultsToPerSwapCap(t *testing.T) {
+	s := newTestServer(t, Options{AllowTrading: true, MaxUSD: 25})
+	if got := s.budget(); got != 25 {
+		t.Fatalf("budget() = %v, want 25 (defaults to --max-usd)", got)
+	}
+	s2 := newTestServer(t, Options{AllowTrading: true, MaxUSD: 25, MaxUSDTotal: 100})
+	if got := s2.budget(); got != 100 {
+		t.Fatalf("budget() = %v, want 100", got)
+	}
+}
+
+// A per-swap cap alone is a rate limit: an agent acting on an injected
+// instruction calls swap_execute in a loop and the loss is unbounded. The
+// cumulative budget is what bounds it.
+func TestReserveBoundsTheTotalNotJustEachSwap(t *testing.T) {
+	s := newTestServer(t, Options{AllowTrading: true, MaxUSD: 25, MaxUSDTotal: 60})
+
+	// Three swaps, each individually under the per-swap cap.
+	for i, want := range []float64{35, 10} {
+		remaining, ok := s.reserve(25)
+		if !ok {
+			t.Fatalf("swap %d: refused with %v remaining, expected to fit", i+1, remaining)
+		}
+		if remaining != want {
+			t.Fatalf("swap %d: remaining = %v, want %v", i+1, remaining, want)
+		}
+	}
+	// The third is under the per-swap cap but over what is left.
+	remaining, ok := s.reserve(25)
+	if ok {
+		t.Fatal("third swap must be refused: $25 does not fit in $10 of remaining budget")
+	}
+	if remaining != 10 {
+		t.Fatalf("refusal reported %v remaining, want 10", remaining)
+	}
+	// A smaller swap that does fit still goes through.
+	if _, ok := s.reserve(10); !ok {
+		t.Fatal("$10 must fit in $10 of remaining budget")
+	}
+	if _, ok := s.reserve(0.01); ok {
+		t.Fatal("budget is exhausted; nothing more may be reserved")
+	}
+}
+
+func TestRunRejectsTotalBelowPerSwapCap(t *testing.T) {
+	err := Run(context.Background(), Options{AllowTrading: true, MaxUSD: 50, MaxUSDTotal: 10})
+	if err == nil {
+		t.Fatal("expected --max-usd-total below --max-usd to be rejected")
+	}
+}

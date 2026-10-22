@@ -29,6 +29,7 @@ import (
 type Options struct {
 	AllowTrading bool     // register swap_execute
 	MaxUSD       float64  // per-swap USD cap; required > 0 when AllowTrading
+	MaxUSDTotal  float64  // cumulative USD budget for the server's lifetime; 0 = same as MaxUSD
 	Chains       []string // allowlist for trading tools; empty = any configured chain
 	AllowRisky   bool     // let swap_execute buy HIGH-risk tokens (default: refuse)
 	Version      string
@@ -46,6 +47,35 @@ type server struct {
 	mu    sync.Mutex
 	flows map[string]*swap.Flow
 	bals  map[string]*balance.Service
+
+	// spentUSD accumulates every executed swap for the lifetime of this
+	// process. A per-swap cap alone is a rate limit, not a budget: an agent
+	// acting on an injected instruction can call swap_execute in a loop and
+	// the loss is unbounded. Guarded by mu.
+	spentUSD float64
+}
+
+// budget returns the cumulative USD ceiling for this server.
+func (s *server) budget() float64 {
+	if s.opts.MaxUSDTotal > 0 {
+		return s.opts.MaxUSDTotal
+	}
+	return s.opts.MaxUSD
+}
+
+// reserve books amountUSD against the cumulative budget, returning the
+// remaining budget when it does not fit. It is called before signing, so a
+// failed swap still consumes budget — the conservative direction: an agent
+// cannot retry its way past the ceiling by provoking failures.
+func (s *server) reserve(amountUSD float64) (remaining float64, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	left := s.budget() - s.spentUSD
+	if amountUSD > left {
+		return left, false
+	}
+	s.spentUSD += amountUSD
+	return s.budget() - s.spentUSD, true
 }
 
 // Run validates options, opens the wallet DAO and serves MCP over stdio until
@@ -53,6 +83,9 @@ type server struct {
 func Run(ctx context.Context, opts Options) error {
 	if opts.AllowTrading && opts.MaxUSD <= 0 {
 		return errors.New("--allow-trading requires --max-usd > 0")
+	}
+	if opts.MaxUSDTotal > 0 && opts.MaxUSDTotal < opts.MaxUSD {
+		return fmt.Errorf("--max-usd-total ($%v) cannot be below --max-usd ($%v)", opts.MaxUSDTotal, opts.MaxUSD)
 	}
 	for _, k := range opts.Chains {
 		if !chain.Has(k) {
