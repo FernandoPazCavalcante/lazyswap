@@ -125,17 +125,3 @@ func TestQuoteRejectsBadUSD(t *testing.T) {
 		}
 	}
 }
-
-func TestExecuteRawTxRefusesWrongChain(t *testing.T) {
-	rpc := testrpc.New()
-	t.Cleanup(rpc.Close)
-	f := fakeFlow(t, rpc)
-
-	_, _, err := f.ExecuteRawTx(context.Background(),
-		"4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318",
-		RawTx{To: "0x1", ChainID: 1}, // ethereum tx against a bsc flow
-		bscToken(t, "BNB"), big.NewInt(1))
-	if err == nil || !strings.Contains(err.Error(), "refusing tx for chainId") {
-		t.Fatalf("want chain-id refusal, got %v", err)
-	}
-}

@@ -20,11 +20,9 @@ import (
 func (m Model) availableTabs() []rightpanel.Tab {
 	return []rightpanel.Tab{
 		{Num: int(tabTokens), Label: "Tokens"},
-		{Num: int(tabReferral), Label: "Referral"},
 		{Num: int(tabAlerts), Label: "Alerts"},
 		{Num: int(tabSettings), Label: "Settings"},
 		{Num: int(tabSwapBTC), Label: "Swap BTC"},
-		{Num: int(tabPass), Label: "Lazyswap Pass"},
 	}
 }
 
@@ -61,16 +59,12 @@ func (m Model) rightColumn() string {
 // activeTabView returns the View of whichever tab is currently selected.
 func (m Model) activeTabView() string {
 	switch m.activeTab {
-	case tabReferral:
-		return m.referral.View()
 	case tabAlerts:
 		return m.alerts.View()
 	case tabSettings:
 		return m.settings.View()
 	case tabSwapBTC:
 		return m.swapbtc.View()
-	case tabPass:
-		return m.pass.View()
 	default:
 		return m.tokens.View()
 	}
@@ -90,10 +84,6 @@ func (m *Model) onTabActivated() tea.Cmd {
 			}
 		}
 		return m.balancesCmdForCurrent()
-	case tabPass:
-		return m.refreshPassCmd()
-	case tabReferral:
-		return m.referralStatsCmd()
 	case tabAlerts:
 		return m.alertsRefreshCmd()
 	default:
@@ -211,11 +201,7 @@ func (m Model) renderStatusBar() string {
 		case focusLeft:
 			hint = fmt.Sprintf("Tab: focus  |  c/d/i  y:copy  |  j/k  |  ^C  |  API:%s", api)
 		case focusRight:
-			if m.activeTab == tabPass {
-				hint = "Tab: focus  |  enter: buy pass  |  ^C"
-			} else {
-				hint = fmt.Sprintf("Tab: focus  |  s:swap  r:refresh  y:copy  |  j/k  |  ^C  |  API:%s", api)
-			}
+			hint = fmt.Sprintf("Tab: focus  |  s:swap  r:refresh  y:copy  |  j/k  |  ^C  |  API:%s", api)
 		}
 	}
 

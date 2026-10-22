@@ -8,11 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/FernandoPazCavalcante/lazyswap/internal/api"
-	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
-	passpkg "github.com/FernandoPazCavalcante/lazyswap/internal/pass"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 	swapbtcpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/swapbtc"
@@ -45,26 +42,12 @@ type swapQuoteMsg struct {
 }
 type safetyMsg struct{ report safety.Report }
 type swapExecMsg struct{ result swap.FlowResult }
-type passStatusMsg struct {
-	status passpkg.Status
-	err    error
-}
-type referralStatsMsg struct {
-	stats api.ReferralStats
-	err   error
-}
-
-type passBoughtMsg struct {
-	txHash string
-	err    error
-}
 
 // chainSwitchedMsg reports the result of re-dialing services for a new chain.
 type chainSwitchedMsg struct {
 	chainKey string
 	balSvc   *balance.Service
 	flowSvc  *swap.Flow
-	passSvc  *passpkg.Service
 	err      error
 }
 
@@ -92,24 +75,19 @@ func deleteCmd(svc *walletpkg.Service, id string) tea.Cmd {
 	}
 }
 
-// quoteCmds builds the quote command (hybrid route) plus the async safety
+// quoteCmds builds the quote command plus the async safety
 // check when the destination token warrants one.
 func (m Model) quoteCmds(from, to swap.TokenInfo, usd string) tea.Cmd {
-	quoteCmd := hybridQuoteCmd(m.flowSvc, m.apiClient, m.chainKey,
-		from, to, usd, m.current.Address, m.current.PrivateKey, m.slippage, m.useAPIRoute())
+	quoteCmd := quoteCmd(m.flowSvc, from, to, usd, m.current.Address, m.slippage)
 	if safety.ShouldCheck(chain.Get(m.chainKey), to) {
 		return tea.Batch(quoteCmd, safetyCmd(m.safetySvc, m.chainKey, to.Address))
 	}
 	return quoteCmd
 }
 
-// hybridQuoteCmd quotes via the API route when asked, authenticating lazily
-// with the wallet's key; any API failure logs and falls back to direct, so
-// the overlay always gets a quote.
-func hybridQuoteCmd(
-	f *swap.Flow, ac *api.Client, chainKey string,
-	from, to swap.TokenInfo, usd, walletAddr, privKey string,
-	slippage float64, useAPI bool,
+// quoteCmd quotes the swap off the UI loop.
+func quoteCmd(
+	f *swap.Flow, from, to swap.TokenInfo, usd, walletAddr string, slippage float64,
 ) tea.Cmd {
 	return func() tea.Msg {
 		if f == nil {
@@ -117,41 +95,8 @@ func hybridQuoteCmd(
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		cfg := chain.Get(chainKey)
-		if useAPI && cfg.OpenOceanKey != "" {
-			ok := ac.Authenticated()
-			if !ok {
-				if _, err := ac.Authenticate(ctx, walletAddr, privKey); err != nil {
-					applog.Warnf("api auth failed, using direct route: %v", err)
-				} else {
-					ok = true
-				}
-			}
-			if ok {
-				q, err := api.QuoteFlow(ctx, ac, f, cfg, from, to, usd, slippage)
-				if err == nil {
-					return swapQuoteMsg{quote: q}
-				}
-				applog.Warnf("api quote failed, using direct route: %v", err)
-			}
-		}
 		q, err := f.Quote(ctx, from, to, usd, slippage, walletAddr)
 		return swapQuoteMsg{quote: q, err: err}
-	}
-}
-
-// executeAPICmd runs the backend-routed execution off the UI loop.
-func executeAPICmd(
-	ac *api.Client, f *swap.Flow, chainKey, privKey string,
-	from, to swap.TokenInfo, usd string, slippage float64,
-) tea.Cmd {
-	return func() tea.Msg {
-		if f == nil {
-			return swapExecMsg{result: swap.FlowResult{Success: false, Err: "swap service not configured"}}
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		return swapExecMsg{result: api.ExecuteFlow(ctx, ac, f, chain.Get(chainKey), privKey, from, to, usd, slippage)}
 	}
 }
 
@@ -171,20 +116,6 @@ func executeSwapCmd(f *swap.Flow, privateKey string, from, to swap.TokenInfo, us
 		defer cancel()
 		res := f.Execute(ctx, privateKey, from, to, usd, slippage)
 		return swapExecMsg{result: res}
-	}
-}
-
-// mintPassCmd mints a LazySwap Pass from the wallet (one-click; the private key
-// is already decrypted in-session), blocking until the tx is mined.
-func mintPassCmd(svc *passpkg.Service, privateKey string) tea.Cmd {
-	return func() tea.Msg {
-		if svc == nil {
-			return passBoughtMsg{err: fmt.Errorf("pass service not configured")}
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-		defer cancel()
-		tx, err := svc.Buy(ctx, privateKey)
-		return passBoughtMsg{txHash: tx, err: err}
 	}
 }
 
@@ -254,10 +185,7 @@ func switchChainCmd(chainKey string) tea.Cmd {
 			balSvc.Close()
 			return chainSwitchedMsg{chainKey: chainKey, err: err}
 		}
-		// Pass is optional per chain: a nil service (no deployment) just makes
-		// the Pass tab show "not available" — never blocks the switch.
-		passSvc, _ := passpkg.New(chainKey)
-		return chainSwitchedMsg{chainKey: chainKey, balSvc: balSvc, flowSvc: flowSvc, passSvc: passSvc}
+		return chainSwitchedMsg{chainKey: chainKey, balSvc: balSvc, flowSvc: flowSvc}
 	}
 }
 
@@ -279,42 +207,4 @@ func (m *Model) balancesCmdForCurrent() tea.Cmd {
 	}
 	m.tokens.SetLoading()
 	return fetchBalancesCmd(m.balSvc, addr)
-}
-
-// refreshPassCmd fetches the current wallet's pass status off the UI thread.
-// Returns nil when no pass service (chain without a pass) or no wallet.
-func (m *Model) refreshPassCmd() tea.Cmd {
-	if m.passSvc == nil || m.current == nil {
-		return nil
-	}
-	svc := m.passSvc
-	addr := m.current.Address
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		st, err := svc.Status(ctx, addr)
-		return passStatusMsg{status: st, err: err}
-	}
-}
-
-// referralStatsCmd authenticates lazily with the current wallet's key and
-// fetches the referral dashboard (display-only tab; claims run via the CLI).
-func (m *Model) referralStatsCmd() tea.Cmd {
-	if m.current == nil {
-		return nil
-	}
-	m.referral.SetLoading()
-	ac := m.apiClient
-	addr, key := m.current.Address, m.current.PrivateKey
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if !ac.Authenticated() {
-			if _, err := ac.Authenticate(ctx, addr, key); err != nil {
-				return referralStatsMsg{err: err}
-			}
-		}
-		st, err := ac.ReferralStats(ctx)
-		return referralStatsMsg{stats: st, err: err}
-	}
 }

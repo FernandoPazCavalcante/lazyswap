@@ -30,8 +30,6 @@ func Run(args []string) int {
 		return runWallets(args[1:])
 	case "set":
 		return runSet(args[1:])
-	case "referral":
-		return runReferral(args[1:])
 	case "mcp":
 		return runMcp(args[1:])
 	case "help", "-h", "--help":
@@ -63,13 +61,8 @@ Usage:
   lazyswap config set-wallet <address>  set the default wallet
   lazyswap config set-chain <key>       set the default chain
   lazyswap config set-slippage <pct>    set the default slippage
-  lazyswap config set-swap-mode <mode>  set the swap route: direct | api
   lazyswap wallets                      list wallet addresses
   lazyswap set password                 print an export line; use: eval "$(lazyswap set password)"
-  lazyswap referral code                show (or create) your referral code + invite link
-  lazyswap referral status              referred wallets, earnings, claimable amount
-  lazyswap referral apply <CODE>        bind this wallet to a referrer (once, forever)
-  lazyswap referral claim               sweep claimable earnings into a manual payout
   lazyswap mcp                          serve the MCP server for AI agents (stdio)
   lazyswap help | version
 
@@ -80,12 +73,10 @@ swap flags:
   --yes                skip the y/N confirmation
   --no-safety          skip the pre-swap token risk check
   --safety-block       refuse the swap when token risk is HIGH
-  --api                route via the lazyswap API (best rates; needs a LazySwap Pass)
-  --direct             route directly via the on-chain V2 router (no auth)
   --quote-only         print the quote (and risk check) then exit without executing
 
 mcp flags:
-  --allow-trading      register the swap_execute / buy_pass tools (default: read-only)
+  --allow-trading      register the swap_execute tool (default: read-only)
   --max-usd <usd>      per-swap USD cap, required with --allow-trading
   --chain <keys>       comma-separated chain allowlist for trading tools
   --allow-risky        let swap_execute buy HIGH-risk tokens (default: refuse)
@@ -96,5 +87,9 @@ Example:
 Environment:
   LAZYSWAP_PASSWORD    wallet password (skips the interactive prompt)
   LAZYSWAP_DATA_DIR    data directory (default ~/.lazyswap)
+  LAZYSWAP_RPC_URL     override every chain's RPC endpoint
+  LAZYSWAP_THORNODE_URL  override the THORNode API endpoint
+  LAZYSWAP_API_URL     override the price-monitor backend
+  LAZYSWAP_TEST        set to 1 to send the app log to /dev/null
 `)
 }

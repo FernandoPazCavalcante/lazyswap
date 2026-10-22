@@ -105,7 +105,7 @@ func TestMonitorErrorSurfacesBackendCode(t *testing.T) {
 
 func TestMonitorRemoveAndTelegramLink(t *testing.T) {
 	srv, _ := monitorServer(t, map[string]string{
-		"DELETE /api/v1/watchlist/w1": `{"success":true}`,
+		"DELETE /api/v1/watchlist/w1":                  `{"success":true}`,
 		"POST /api/v1/notifications/channels/telegram": `{"success":true,"data":{"code":"123456","expiresAt":"2026-01-01T00:00:00Z","deepLink":"https://t.me/Bot?start=123456"}}`,
 	})
 	m := NewMonitor(srv.URL, "key1")

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "midnax": {
+      "type": "http",
+      "url": "https://mcp.midnax.ai",
+      "headers": { "Authorization": "Bearer ${MIDNAX_TOKEN}" }
+    }
+  }
+}

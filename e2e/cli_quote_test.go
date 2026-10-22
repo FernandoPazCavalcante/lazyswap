@@ -32,7 +32,7 @@ func TestCLIQuoteOnly(t *testing.T) {
 	// RPC flake is the dominant failure mode, not our code.
 	retry(t, 3, func() error {
 		out, code := runCLI(t, "swap", "0.50", "BNB", "USDT",
-			"--chain", "bsc", "--direct", "--quote-only", "--no-safety")
+			"--chain", "bsc", "--quote-only", "--no-safety")
 		if code != 0 {
 			return fmt.Errorf("exit %d:\n%s", code, out)
 		}

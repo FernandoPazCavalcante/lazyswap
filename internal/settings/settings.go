@@ -14,7 +14,6 @@ import (
 var (
 	errBadSlippage = errors.New("slippage must be between 0 and 100")
 	errBadChain    = errors.New("unknown chain")
-	errBadSwapMode = errors.New(`swap mode must be "direct" or "api"`)
 )
 
 // DefaultSlippage is the slippage percentage applied when none is stored.
@@ -24,22 +23,17 @@ const (
 	keySlippage      = "setting_slippage"
 	keyChain         = "setting_chain"
 	keyDefaultWallet = "setting_default_wallet"
-	keySwapMode      = "setting_swap_mode"
 )
 
 // Swap-mode values. Empty means "auto": api when authenticated and the chain
 // supports it, direct otherwise.
-const (
-	SwapModeDirect = "direct"
-	SwapModeAPI    = "api"
-)
+const ()
 
 // Settings mirrors every option in the TUI settings tab and the CLI flags.
 type Settings struct {
 	Slippage      float64 // percent, 0–100
 	ChainKey      string  // a key in chain.CHAINS
 	DefaultWallet string  // wallet address; "" when unset
-	SwapMode      string  // "direct" | "api" | "" (auto)
 }
 
 // Defaults returns the baseline settings used before anything is persisted.
@@ -61,9 +55,6 @@ func Load(dao *wallet.DAO) (Settings, error) {
 		return s, err
 	}
 	if err := loadDefaultWallet(dao, &s); err != nil {
-		return s, err
-	}
-	if err := loadSwapMode(dao, &s); err != nil {
 		return s, err
 	}
 	return s, nil
@@ -99,15 +90,6 @@ func loadDefaultWallet(dao *wallet.DAO, s *Settings) error {
 	return err
 }
 
-// loadSwapMode applies a stored swap mode to s when present and valid.
-func loadSwapMode(dao *wallet.DAO, s *Settings) error {
-	v, ok, err := dao.GetConfig(keySwapMode)
-	if err == nil && ok && (v == SwapModeDirect || v == SwapModeAPI) {
-		s.SwapMode = v
-	}
-	return err
-}
-
 // SetSlippage persists the slippage tolerance (validated 0–100).
 func SetSlippage(dao *wallet.DAO, v float64) error {
 	if v < 0 || v > 100 {
@@ -127,12 +109,4 @@ func SetChain(dao *wallet.DAO, key string) error {
 // SetDefaultWallet persists the default wallet address.
 func SetDefaultWallet(dao *wallet.DAO, address string) error {
 	return dao.SetConfig(keyDefaultWallet, address)
-}
-
-// SetSwapMode persists the preferred swap path ("direct" or "api").
-func SetSwapMode(dao *wallet.DAO, mode string) error {
-	if mode != SwapModeDirect && mode != SwapModeAPI {
-		return errBadSwapMode
-	}
-	return dao.SetConfig(keySwapMode, mode)
 }

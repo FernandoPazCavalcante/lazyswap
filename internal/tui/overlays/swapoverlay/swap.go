@@ -43,14 +43,6 @@ type ExecuteRequestMsg struct {
 	USDAmount string
 }
 
-// ModeToggleMsg asks the parent to flip the swap route (direct ↔ api) and
-// requote the same intent.
-type ModeToggleMsg struct {
-	From      swap.TokenInfo
-	To        swap.TokenInfo
-	USDAmount string
-}
-
 // ─── Input messages (sent by parent) ─────────────────────────────────────────
 
 // QuoteResultMsg carries the result of a QuoteRequestMsg. SafetyPending tells
@@ -267,19 +259,6 @@ func (m Model) handlePreviewStep(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	case "n":
 		return m.stepBack()
-	case "t":
-		// Requote via the other route; show the loading state meanwhile.
-		m.quote = nil
-		m.quoteErr = ""
-		m.risk = nil
-		m.riskPending = false
-		return m, func() tea.Msg {
-			return ModeToggleMsg{
-				From:      m.selectedFrom.toTokenInfo(),
-				To:        m.selectedTo.toTokenInfo(),
-				USDAmount: m.usdAmount,
-			}
-		}
 	}
 	return m, nil
 }

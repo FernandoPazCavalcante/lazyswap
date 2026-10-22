@@ -11,15 +11,12 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
-	passpkg "github.com/FernandoPazCavalcante/lazyswap/internal/pass"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/importoverlay"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/swapoverlay"
 	alertspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/alerts"
-	passpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/lazyswappass"
-	referralpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/referral"
 	settingspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/settings"
 	swapbtcpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/swapbtc"
 	tokenspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/tokens"
@@ -51,11 +48,9 @@ type tab int
 
 const (
 	tabTokens   tab = 1
-	tabReferral tab = 2
-	tabAlerts   tab = 3
-	tabSettings tab = 4
-	tabSwapBTC  tab = 5
-	tabPass     tab = 6
+	tabAlerts   tab = 2
+	tabSettings tab = 3
+	tabSwapBTC  tab = 4
 )
 
 // app_config keys for the price-monitor account. The API key is stored
@@ -71,24 +66,14 @@ type Model struct {
 	svc       *walletpkg.Service
 	balSvc    *balance.Service
 	flowSvc   *swap.Flow
-	passSvc   *passpkg.Service
 	safetySvc *safety.Service
-	apiClient *api.Client
 	monitor   *api.Monitor
-
-	// swapMode is the persisted route preference ("", "direct", "api"); the
-	// swap overlay's 't' key toggles it. lastQuoteMode records which route the
-	// latest quote actually used, so execution follows the quoted route.
-	swapMode      string
-	lastQuoteMode string
 
 	panel    walletpanel.Model
 	tokens   tokenspanel.Model
-	referral referralpanel.Model
 	alerts   alertspanel.Model
 	settings settingspanel.Model
 	swapbtc  swapbtcpanel.Model
-	pass     passpanel.Model
 	imp      importoverlay.Model
 	swap     swapoverlay.Model
 
@@ -125,14 +110,12 @@ type Model struct {
 // remains usable (useful for tests). dao may be nil in tests (persistence is
 // then skipped). st seeds the chain, slippage, and default wallet from the
 // shared, persisted settings.
-func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, passSvc *passpkg.Service, dao *walletpkg.DAO, st settings.Settings) Model {
+func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, dao *walletpkg.DAO, st settings.Settings) Model {
 	chainKey := st.ChainKey
 	if chainKey == "" {
 		chainKey = chain.DefaultKey
 	}
 	c := chain.Get(chainKey)
-	passPanel := passpanel.New()
-	passPanel.SetAvailable(c.PassAddress != "", c.NativeSymbol)
 	monitorKey := ""
 	if dao != nil {
 		if v, ok, err := dao.GetConfig(cfgMonitorAPIKey); err == nil && ok {
@@ -146,18 +129,13 @@ func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, pa
 		svc:           svc,
 		balSvc:        balSvc,
 		flowSvc:       flowSvc,
-		passSvc:       passSvc,
 		safetySvc:     safety.New(),
-		apiClient:     api.New(""),
 		monitor:       api.NewMonitor("", monitorKey),
-		swapMode:      st.SwapMode,
 		panel:         walletpanel.New(),
 		tokens:        tokenspanel.New(),
-		referral:      referralpanel.New(),
 		alerts:        alertsPanel,
 		settings:      settingspanel.New(st.Slippage, chainKey, c.Name),
 		swapbtc:       swapbtcpanel.New(),
-		pass:          passPanel,
 		imp:           importoverlay.New(),
 		focus:         focusLeft,
 		activeTab:     tabTokens,
@@ -200,15 +178,6 @@ func (m Model) persistDefaultWallet(addr string) {
 	}
 }
 
-func (m Model) persistSwapMode(mode string) {
-	if m.dao == nil {
-		return
-	}
-	if err := settings.SetSwapMode(m.dao, mode); err != nil {
-		applog.Error("persist swap mode", err)
-	}
-}
-
 // Init kicks off the initial wallet load.
 func (m Model) Init() tea.Cmd { return refreshWalletsCmd(m.svc) }
 
@@ -242,11 +211,9 @@ func (m *Model) SetSize(w, h int) {
 	}
 	m.panel.SetSize(leftW, bodyH)
 	m.tokens.SetSize(rightW, rightH)
-	m.referral.SetSize(rightW, rightH)
 	m.alerts.SetSize(rightW, rightH)
 	m.settings.SetSize(rightW, rightH)
 	m.swapbtc.SetSize(rightW, rightH)
-	m.pass.SetSize(rightW, rightH)
 	m.imp.SetSize(w, h)
 	if m.mode == modeSwap {
 		m.swap.SetSize(w, h)
@@ -258,22 +225,9 @@ func (m *Model) applyFocusStyles() {
 	m.panel.SetFocused(m.focus == focusLeft)
 	rightFocused := m.focus == focusRight
 	m.tokens.SetFocused(rightFocused && m.activeTab == tabTokens)
-	m.referral.SetFocused(rightFocused && m.activeTab == tabReferral)
 	m.alerts.SetFocused(rightFocused && m.activeTab == tabAlerts)
 	m.settings.SetFocused(rightFocused && m.activeTab == tabSettings)
 	m.swapbtc.SetFocused(rightFocused && m.activeTab == tabSwapBTC)
-	m.pass.SetFocused(rightFocused && m.activeTab == tabPass)
-}
-
-// useAPIRoute decides whether a quote should go through the backend: explicit
-// "api" preference, or auto ("") once authenticated — never on chains without
-// OpenOcean coverage.
-func (m Model) useAPIRoute() bool {
-	if chain.Get(m.chainKey).OpenOceanKey == "" {
-		return false
-	}
-	return m.swapMode == settings.SwapModeAPI ||
-		(m.swapMode == "" && m.apiClient.Authenticated())
 }
 
 func (m Model) chainName() string {

@@ -47,9 +47,6 @@ func (m Model) handleAppMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 	if next, cmd, handled := m.handleSwapMsg(msg); handled {
 		return next, cmd, true
 	}
-	if next, cmd, handled := m.handlePassMsg(msg); handled {
-		return next, cmd, true
-	}
 	if next, cmd, handled := m.handleSwapBTCMsg(msg); handled {
 		return next, cmd, true
 	}
@@ -141,10 +138,6 @@ func (m Model) routeToActiveTab(msg tea.Msg) (Model, tea.Cmd) {
 	case tabSwapBTC:
 		var cmd tea.Cmd
 		m.swapbtc, cmd = m.swapbtc.Update(msg)
-		return m, cmd
-	case tabPass:
-		var cmd tea.Cmd
-		m.pass, cmd = m.pass.Update(msg)
 		return m, cmd
 	default:
 		var cmd tea.Cmd

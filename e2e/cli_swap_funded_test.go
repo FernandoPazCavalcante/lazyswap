@@ -40,7 +40,7 @@ func TestFundedSwap(t *testing.T) {
 
 	retry(t, 2, func() error {
 		out, code := runCLI(t, "swap", "0.05", "tBNB", "USDT",
-			"--chain", "bsc_testnet", "--direct", "--yes", "--no-safety",
+			"--chain", "bsc_testnet", "--yes", "--no-safety",
 			"--wallet", funded.Address)
 		if code != 0 {
 			return fmt.Errorf("swap exited %d:\n%s", code, out)

@@ -99,5 +99,5 @@ func (m Model) onWalletSelected(msg walletpanel.SelectionChangedMsg) (Model, tea
 	if msg.Wallet != nil {
 		m.persistDefaultWallet(msg.Wallet.Address)
 	}
-	return m, tea.Batch(m.balancesCmdForCurrent(), m.refreshPassCmd())
+	return m, m.balancesCmdForCurrent()
 }

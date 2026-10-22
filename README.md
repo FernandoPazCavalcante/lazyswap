@@ -14,8 +14,9 @@ PancakeSwap), plus cross-chain BTC swaps via THORchain.
 
 ## Highlights
 
-- **Cross-chain BTC swaps.** Swap native Bitcoin ↔ EVM tokens from a single
-  terminal wallet, routed through THORchain — no bridge, no wrapped BTC.
+- **Cross-chain swaps to native BTC.** Send an EVM token and receive native
+  Bitcoin, routed through THORchain — no bridge, no wrapped BTC. One direction
+  only today: EVM → BTC. BTC → EVM is not implemented.
 - **Self-custody, no exchange.** You hold the keys; trades go straight to a DEX.
   No account, no KYC, no deposits, no withdrawal queue.
 - **Encrypted on disk.** Your private key is sealed with AES-256-GCM under a
@@ -28,11 +29,9 @@ PancakeSwap), plus cross-chain BTC swaps via THORchain.
   HIGH-risk swaps. Fail-closed: an unreachable risk API warns, never passes.
 - **Multi-chain EVM.** Ethereum and BSC today, with chain config in one place —
   RPC URLs, routers and token addresses are never hardcoded elsewhere.
-- **Two swap routes, one UI.** *Direct* (default): straight to the on-chain V2
-  router — free, no account. *API*: routed through the lazyswap backend for
-  OpenOcean best rates across 500+ DEXs with MEV protection (1% fee, needs a
-  LazySwap Pass). The tx is always signed locally and broadcast via your own
-  RPC; if the API is unreachable the app falls back to direct automatically.
+- **No fee.** The amount you ask to swap is the amount that reaches the
+  router. lazyswap takes nothing — see [docs/FEES.md](docs/FEES.md) for what
+  you *do* pay (gas and the DEX pool's own fee) and who receives it.
 
 ## Usage
 
@@ -45,9 +44,7 @@ lazyswap                          # launch the Vim-style TUI (first run creates 
 
 lazyswap swap 0.50 BNB USDT       # swap $0.50 worth of BNB into USDT
 lazyswap swap 5 BNB USDT --yes    # skip the y/N confirmation (handy in scripts)
-lazyswap swap 5 BNB USDT --api    # route via the API (OpenOcean best rate; needs a Pass)
 lazyswap config set-swap-mode api # make the API route the default
-lazyswap referral code            # your referral code — earn a share of referred swap fees
 lazyswap wallets                  # list wallet addresses
 lazyswap config show              # print current chain / slippage / default wallet
 lazyswap mcp                      # serve the MCP server for AI agents (stdio)
@@ -80,7 +77,8 @@ Or in `.mcp.json`:
 To let an agent actually execute swaps, opt in explicitly:
 
 ```bash
-LAZYSWAP_PASSWORD=… lazyswap mcp --allow-trading --max-usd 20 --chain bsc
+eval "$(lazyswap set password)"   # exports LAZYSWAP_PASSWORD without touching your shell history
+lazyswap mcp --allow-trading --max-usd 20 --chain bsc
 ```
 
 - `--allow-trading` registers the `swap_execute` / `buy_pass` tools; without it
@@ -88,7 +86,9 @@ LAZYSWAP_PASSWORD=… lazyswap mcp --allow-trading --max-usd 20 --chain bsc
 - `--max-usd` is a code-enforced per-swap cap (required with trading).
 - `--chain` optionally restricts trading to an allowlist of chains.
 - The wallet password comes from the `LAZYSWAP_PASSWORD` environment only —
-  it is never a tool parameter, so it can never end up in a model's context.
+  it is never a tool parameter, so it cannot be echoed back through a tool
+  call. Note the agent host's process environment is inside the trust
+  boundary: anything that can read it can read the password.
 
 ## Installation
 
@@ -109,27 +109,46 @@ First launch creates a wallet; your private key is encrypted with AES-256-GCM
 under a PBKDF2-derived key (100k iterations) and never leaves the box in
 plaintext.
 
-## Why local beats a centralized exchange
+## Local wallet vs. an exchange: the honest trade-off
 
-Running lazyswap on your own machine is strictly safer than trading on a CEX:
+Self-custody is a different risk profile, not a strictly better one. Which side
+you want depends on what you are afraid of.
 
-- **You keep custody.** Keys are encrypted on disk under your password. On a CEX
-  the exchange holds your coins — "not your keys, not your coins." Exchanges get
-  hacked, freeze withdrawals, and go insolvent (Mt. Gox, FTX). Here the funds are
-  in *your* wallet the whole time.
-- **No deposit, no withdrawal queue.** The swap executes against the DEX router
-  from your address in one signed transaction. Nothing to deposit first, nothing
-  to wait to withdraw.
-- **No account, no KYC, no gatekeeper.** No sign-up, no identity upload, no
-  region lock, no account suspension. Just a wallet and an RPC.
-- **The key never leaves your machine.** RPC reads, quotes, and signing all happen
-  locally. Your password and private key are never transmitted to a server.
-- **On-chain transparency.** Every trade is a public transaction you can verify on
-  a block explorer — not an internal ledger entry you have to trust.
+| | lazyswap | A centralized exchange |
+|---|---|---|
+| Who holds the coins | You | The exchange (Mt. Gox, FTX) |
+| Account can be frozen or closed | No | Yes |
+| KYC / region lock | None | Usually |
+| Trade is publicly verifiable | Yes, it is a transaction | No, an internal ledger entry |
+| **If you lose your password** | **Funds are gone. There is no reset and, today, no seed export.** | Account recovery, support, 2FA reset |
+| If *they* get breached | Your keys are on your machine | Your coins are in their hot wallet |
+| Protects you from your own mistake | No — a signed transaction is final | Sometimes: address whitelists, holds |
+| Cost | Network gas + the DEX pool fee | Trading fee + withdrawal fee |
 
-Trade-off: you pay network gas and you are responsible for your own backup. Lose
-the password and the encrypted key with no seed backup, and it's gone — same rule
-as any self-custody wallet.
+The row in bold is the one that actually decides it for most people, and it is
+why this is not "strictly safer". An exchange has a human you can email. A
+self-custody wallet has you.
+
+## What lazyswap does not do
+
+Stated plainly, so you can rule it out quickly:
+
+- **No seed phrase export yet.** A wallet created in-app cannot currently be
+  revealed or exported, so it cannot be backed up or restored elsewhere. Until
+  that ships, import a wallet you already back up rather than generating one
+  here. This is the next thing being fixed.
+- **No pre-sign simulation.** Browser wallets like Rabby simulate a transaction
+  and show you the balance changes before you approve. lazyswap does not — it
+  shows you a quote, then sends the transaction.
+- **No hardware wallet support.** No Ledger, no Trezor. The key lives in an
+  encrypted file on disk.
+- **Two mainnets, two DEXes, V2 routers only.** Ethereum and BSC, via Uniswap V2
+  and PancakeSwap. No V3, no aggregation.
+- **EVM → BTC only** on the cross-chain path, and its 3% slippage tolerance is
+  not yet configurable.
+- **No Windows build.** Linux and macOS.
+- **Not audited.** See [SECURITY.md](SECURITY.md) for the known weaknesses,
+  written down by the author rather than left to be discovered.
 
 ## Architecture
 
