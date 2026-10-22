@@ -95,31 +95,3 @@ func setSlippage(dao *wallet.DAO, args []string) int {
 	fmt.Printf("default slippage set to %s%%\n", args[1])
 	return 0
 }
-
-// runWallets lists every wallet address. Addresses are stored plaintext, so
-// this needs no password.
-func runWallets(_ []string) int {
-	dao, err := wallet.Open()
-	if err != nil {
-		return die("open database: %v", err)
-	}
-	defer func() { _ = dao.Close() }()
-
-	ws, err := dao.FetchAll()
-	if err != nil {
-		return die("fetch wallets: %v", err)
-	}
-	if len(ws) == 0 {
-		fmt.Println("no wallets yet — create one in the TUI (`lazyswap`)")
-		return 0
-	}
-	st, _ := settings.Load(dao)
-	for _, w := range ws {
-		marker := "  "
-		if w.Address == st.DefaultWallet {
-			marker = "* "
-		}
-		fmt.Printf("%s%s\n", marker, w.Address)
-	}
-	return 0
-}

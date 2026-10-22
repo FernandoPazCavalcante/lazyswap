@@ -9,6 +9,7 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap/internal/crypto"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/importoverlay"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/seedoverlay"
 	settingspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/settings"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
@@ -49,23 +50,64 @@ func TestNKeyDuringConfirmCreateCancels(t *testing.T) {
 	}
 }
 
-func TestYKeyDuringConfirmCreateIssuesCommand(t *testing.T) {
+// 'y' must not save anything: the wallet only exists once the backup quiz is
+// passed, so a user can never fund a wallet whose phrase they never saw.
+func TestYKeyDuringConfirmCreateOpensBackupWithoutSaving(t *testing.T) {
 	m := newModel(t)
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	if m.mode != modeSeed || m.seed.Step() != "show" {
+		t.Fatalf("mode = %v step = %q, want backup overlay on the phrase", m.mode, m.seed.Step())
+	}
+	if ws, _ := m.dao.FetchAll(); len(ws) != 0 {
+		t.Fatalf("wallet saved before backup was confirmed: %d rows", len(ws))
+	}
+}
+
+func TestBackupConfirmedSavesWallet(t *testing.T) {
+	m := newModel(t)
+	m.mode = modeSeed
+	_, cmd := m.Update(seedoverlay.ConfirmedMsg{Phrase: hardhatPhrase})
 	if cmd == nil {
-		t.Fatalf("expected a create command")
+		t.Fatal("expected a save command")
 	}
-	msg := cmd()
-	cm, ok := msg.(createdMsg)
-	if !ok {
-		t.Fatalf("expected createdMsg, got %T", msg)
+	cm, ok := cmd().(createdMsg)
+	if !ok || cm.err != nil || cm.w == nil {
+		t.Fatalf("save failed: %#v", cm)
 	}
-	if cm.err != nil {
-		t.Fatalf("create failed: %v", cm.err)
+	if ws, _ := m.dao.FetchAll(); len(ws) != 1 {
+		t.Fatalf("rows = %d, want 1", len(ws))
 	}
-	if cm.w == nil || cm.w.Address == "" {
-		t.Fatalf("created wallet missing")
+}
+
+func TestBackupAbandonedSavesNothing(t *testing.T) {
+	m := newModel(t)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = m.Update(cmd())
+	if m.mode != modeNormal {
+		t.Fatalf("mode = %v, want normal", m.mode)
+	}
+	if ws, _ := m.dao.FetchAll(); len(ws) != 0 {
+		t.Fatalf("abandoned backup saved %d wallets", len(ws))
+	}
+}
+
+func TestBKeyOpensRevealForCurrentWallet(t *testing.T) {
+	m := newModel(t)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	if m.mode != modeNormal {
+		t.Fatalf("b with no wallet should stay normal; got %v", m.mode)
+	}
+	w, err := m.svc.Import(hardhatPhrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.current = w
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	if m.mode != modeSeed || m.seed.Step() != "password" {
+		t.Fatalf("mode = %v step = %q, want reveal overlay asking for the password", m.mode, m.seed.Step())
 	}
 }
 

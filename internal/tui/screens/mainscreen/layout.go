@@ -103,6 +103,9 @@ func (m Model) View() string {
 	if m.mode == modeWalletQR {
 		return m.walletQRView()
 	}
+	if m.mode == modeSeed {
+		return m.seed.View()
+	}
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, m.panel.View(), m.rightColumn())
 
@@ -196,10 +199,12 @@ func (m Model) renderStatusBar() string {
 		hint = "Esc: back"
 	case modeWalletQR:
 		hint = "c: copy  |  Esc: close"
+	case modeSeed:
+		hint = "Esc: close"
 	default:
 		switch m.focus {
 		case focusLeft:
-			hint = fmt.Sprintf("Tab: focus  |  c/d/i  y:copy  |  j/k  |  ^C  |  API:%s", api)
+			hint = fmt.Sprintf("Tab: focus  |  c/d/i  b:backup  y:copy  |  j/k  |  ^C  |  API:%s", api)
 		case focusRight:
 			hint = fmt.Sprintf("Tab: focus  |  s:swap  r:refresh  y:copy  |  j/k  |  ^C  |  API:%s", api)
 		}

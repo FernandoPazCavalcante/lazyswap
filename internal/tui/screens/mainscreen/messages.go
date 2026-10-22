@@ -57,9 +57,13 @@ func refreshWalletsCmd(svc *walletpkg.Service) tea.Cmd {
 		return walletsRefreshedMsg{wallets: ws, err: err}
 	}
 }
-func createCmd(svc *walletpkg.Service) tea.Cmd {
+
+// saveConfirmedCmd persists a generated phrase once the user has confirmed
+// the backup. Until then nothing is written, so an abandoned backup leaves no
+// wallet the user could fund and then lose.
+func saveConfirmedCmd(svc *walletpkg.Service, phrase string) tea.Cmd {
 	return func() tea.Msg {
-		w, err := svc.Create()
+		w, err := svc.Import(phrase)
 		return createdMsg{w: w, err: err}
 	}
 }

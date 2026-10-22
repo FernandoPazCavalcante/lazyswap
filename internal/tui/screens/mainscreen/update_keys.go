@@ -23,21 +23,10 @@ func (m Model) handleNormalKey(k tea.KeyMsg) (Model, tea.Cmd, bool) {
 	if next, cmd, handled := m.handleTabSwitchKey(k); handled {
 		return next, cmd, true
 	}
+	if next, cmd, handled := m.handleWalletKey(k); handled {
+		return next, cmd, true
+	}
 	switch k.String() {
-	case "c":
-		m.mode = modeConfirmCreate
-		return m, nil, true
-	case "d":
-		if m.current != nil {
-			m.mode = modeConfirmDelete
-		}
-		return m, nil, true
-	case "i":
-		next, cmd := m.openImportOverlay()
-		return next, cmd, true
-	case "s":
-		next, cmd := m.openSwapOverlay()
-		return next, cmd, true
 	case "r":
 		return m, m.balancesCmdForCurrent(), true
 	case "a":
@@ -57,6 +46,31 @@ func (m Model) handleNormalKey(k tea.KeyMsg) (Model, tea.Cmd, bool) {
 		}
 		m.applyFocusStyles()
 		return m, nil, true
+	}
+	return m, nil, false
+}
+
+// handleWalletKey handles the wallet shortcuts that open a confirmation or
+// an overlay: create, delete, import, backup and swap.
+func (m Model) handleWalletKey(k tea.KeyMsg) (Model, tea.Cmd, bool) {
+	switch k.String() {
+	case "c":
+		m.mode = modeConfirmCreate
+		return m, nil, true
+	case "d":
+		if m.current != nil {
+			m.mode = modeConfirmDelete
+		}
+		return m, nil, true
+	case "i":
+		next, cmd := m.openImportOverlay()
+		return next, cmd, true
+	case "b":
+		next, cmd := m.openRevealOverlay()
+		return next, cmd, true
+	case "s":
+		next, cmd := m.openSwapOverlay()
+		return next, cmd, true
 	}
 	return m, nil, false
 }

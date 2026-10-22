@@ -15,6 +15,7 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/importoverlay"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/seedoverlay"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/swapoverlay"
 	alertspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/alerts"
 	settingspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/settings"
@@ -33,6 +34,7 @@ const (
 	modeImport
 	modeSwap
 	modeWalletQR
+	modeSeed
 )
 
 type focused int
@@ -76,6 +78,7 @@ type Model struct {
 	swapbtc  swapbtcpanel.Model
 	imp      importoverlay.Model
 	swap     swapoverlay.Model
+	seed     seedoverlay.Model
 
 	mode      mode
 	focus     focused
@@ -218,6 +221,7 @@ func (m *Model) SetSize(w, h int) {
 	if m.mode == modeSwap {
 		m.swap.SetSize(w, h)
 	}
+	m.seed.SetSize(w, h)
 	m.applyFocusStyles()
 }
 

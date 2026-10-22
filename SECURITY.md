@@ -57,11 +57,25 @@ highest-value fix on this page and is **open**.
 
 ### Backup and recovery
 
-**A wallet created in-app cannot currently be exported.** There is an import
-path but no reveal and no keystore export, so a generated wallet has no backup
-and no recovery. Until that ships, **import a wallet you already back up
-elsewhere** instead of generating one here. This is the next item being worked
-on.
+The recovery phrase is the backup; the lazyswap password only encrypts the
+local file.
+
+- A wallet created in the TUI is **not saved until the user types back two
+  randomly chosen words** of its phrase (`internal/tui/overlays/seedoverlay`).
+  Abandoning that step discards the phrase.
+- `lazyswap wallets reveal` and the TUI's `b` key re-verify the password
+  against the store before showing the phrase, even inside an unlocked
+  session. The CLI refuses to write the phrase to a non-terminal stdout unless
+  `--allow-pipe` is passed, because a phrase in a pipe tends to end up in a
+  log or CI artifact.
+- `lazyswap wallets export --keystore <path>` writes a keystore V3 file with
+  go-ethereum's standard scrypt cost (N=2^18), created `0600` with `O_EXCL` so it
+  never overwrites a file. Its passphrase is separate from the lazyswap
+  password and must be at least 8 characters. The file is meant to leave the
+  machine and can be attacked offline, so its strength is the passphrase.
+
+Reveal currently goes through `FetchAll`, so it decrypts every wallet to show
+one — the same open issue described above.
 
 There is also no password-change path, so a password you suspect is compromised
 has no remedy today.

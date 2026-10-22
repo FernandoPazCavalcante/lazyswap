@@ -40,18 +40,36 @@ Launch the TUI, or drive everything from the command line.
 ![lazyswap demo](docs/demo.gif)
 
 ```bash
-lazyswap                          # launch the Vim-style TUI (first run creates a wallet)
+lazyswap                          # launch the Vim-style TUI (press c to create a wallet)
 
 lazyswap swap 0.50 BNB USDT       # swap $0.50 worth of BNB into USDT
 lazyswap swap 5 BNB USDT --yes    # skip the y/N confirmation (handy in scripts)
-lazyswap config set-swap-mode api # make the API route the default
 lazyswap wallets                  # list wallet addresses
+lazyswap wallets reveal           # print the recovery phrase (asks for the password)
+lazyswap wallets export --keystore ~/backup.json  # encrypted keystore for MetaMask/Rabby/geth
 lazyswap config show              # print current chain / slippage / default wallet
 lazyswap mcp                      # serve the MCP server for AI agents (stdio)
 lazyswap help                     # full command reference
 ```
 
 Set `LAZYSWAP_PASSWORD` to skip the interactive password prompt when scripting.
+
+### Backing up a wallet
+
+Your lazyswap password protects the file on this machine; it does **not** back
+anything up. The 12-word recovery phrase does.
+
+- **Creating a wallet** in the TUI shows the phrase first and asks you to type
+  back two of its words. The wallet is only saved once you do — esc discards it,
+  so you can never fund a wallet whose phrase you never saw.
+- **Seeing the phrase again:** press `b` in the TUI (it re-asks your password),
+  or run `lazyswap wallets reveal`. The CLI refuses to print the phrase into a
+  pipe or file unless you pass `--allow-pipe`.
+- **Moving to another wallet app:** `lazyswap wallets export --keystore <path>`
+  writes a standard keystore V3 file (mode `0600`, never overwrites) encrypted
+  with a separate passphrase of your choice. MetaMask, Rabby and geth
+  import it. The phrase restores the wallet anywhere that speaks BIP-39, at
+  derivation path `m/44'/60'/0'/0/0`.
 
 ## MCP server (AI agents)
 
@@ -132,7 +150,7 @@ you want depends on what you are afraid of.
 | Account can be frozen or closed | No | Yes |
 | KYC / region lock | None | Usually |
 | Trade is publicly verifiable | Yes, it is a transaction | No, an internal ledger entry |
-| **If you lose your password** | **Funds are gone. There is no reset and, today, no seed export.** | Account recovery, support, 2FA reset |
+| **If you lose your password** | **Only your written-down recovery phrase gets you back in. No phrase, no funds — there is no reset.** | Account recovery, support, 2FA reset |
 | If *they* get breached | Your keys are on your machine | Your coins are in their hot wallet |
 | Protects you from your own mistake | No — a signed transaction is final | Sometimes: address whitelists, holds |
 | Cost | Network gas + the DEX pool fee | Trading fee + withdrawal fee |
@@ -145,10 +163,6 @@ self-custody wallet has you.
 
 Stated plainly, so you can rule it out quickly:
 
-- **No seed phrase export yet.** A wallet created in-app cannot currently be
-  revealed or exported, so it cannot be backed up or restored elsewhere. Until
-  that ships, import a wallet you already back up rather than generating one
-  here. This is the next thing being fixed.
 - **No pre-sign simulation.** Browser wallets like Rabby simulate a transaction
   and show you the balance changes before you approve. lazyswap does not — it
   shows you a quote, then sends the transaction.

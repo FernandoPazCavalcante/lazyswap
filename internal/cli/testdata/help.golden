@@ -8,6 +8,8 @@ Usage:
   lazyswap config set-chain <key>       set the default chain
   lazyswap config set-slippage <pct>    set the default slippage
   lazyswap wallets                      list wallet addresses
+  lazyswap wallets reveal               print the recovery phrase (asks for the password)
+  lazyswap wallets export --keystore <path>  write an encrypted keystore V3 JSON file
   lazyswap set password                 print an export line; use: eval "$(lazyswap set password)"
   lazyswap mcp                          serve the MCP server for AI agents (stdio)
   lazyswap help | version
@@ -21,6 +23,11 @@ swap flags:
   --safety-block       refuse the swap when token risk is HIGH
   --quote-only         print the quote (and risk check) then exit without executing
 
+wallets reveal / export flags:
+  --address <address>  wallet to use (default: configured default, or the only wallet)
+  --keystore <path>    export: output file; never overwrites an existing one
+  --allow-pipe         reveal: print even when stdout is not a terminal
+
 mcp flags:
   --allow-trading        register the swap_execute tool (default: read-only)
   --max-usd <usd>        per-swap USD cap, required with --allow-trading
@@ -33,6 +40,7 @@ Example:
 
 Environment:
   LAZYSWAP_PASSWORD    wallet password (skips the interactive prompt)
+  LAZYSWAP_KEYSTORE_PASSPHRASE  passphrase for "wallets export" (skips the prompt)
   LAZYSWAP_DATA_DIR    data directory (default ~/.lazyswap)
   LAZYSWAP_RPC_URL     override every chain's RPC endpoint
   LAZYSWAP_THORNODE_URL  override the THORNode API endpoint
