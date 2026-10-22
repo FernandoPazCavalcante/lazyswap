@@ -54,7 +54,7 @@ func TestTUISmoke(t *testing.T) {
 		{500 * time.Millisecond, tea.KeyMsg{Type: tea.KeyEnter}}, // first password entered
 		{time.Second, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(e2ePassword)}},
 		{500 * time.Millisecond, tea.KeyMsg{Type: tea.KeyEnter}},              // confirm → PBKDF2 + wallet create
-		{3 * time.Second, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'4'}}}, // main screen → Settings tab (number key)
+		{3 * time.Second, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}}}, // main screen → Settings tab (number key)
 		{time.Second, tea.KeyMsg{Type: tea.KeyCtrlC}},                         // quit
 	}
 	for _, s := range steps {

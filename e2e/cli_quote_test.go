@@ -24,7 +24,7 @@ func TestCLIQuoteOnly(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("config show exited %d:\n%s", code, out)
 	}
-	mustContain(t, out, "chain", "slippage", "swap mode")
+	mustContain(t, out, "chain", "slippage", "wallet")
 
 	// Quote against the live BSC mainnet router — read-only, no funds, nothing
 	// signed. (bsc_testnet is not usable here: its configured router has no
