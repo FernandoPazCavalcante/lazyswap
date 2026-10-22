@@ -75,25 +75,14 @@ func (m Model) previewBody() string {
 		return theme.Dim().Render("Loading quote…")
 	}
 	q := m.quote
-	route := "direct — on-chain V2 router"
-	if q.Mode == "api" {
-		route = "api — OpenOcean best rate, MEV protected"
-	}
 	lines := []string{
-		fmt.Sprintf("Route          %s", route),
 		fmt.Sprintf("USD            %s", q.USDAmountFormatted),
 		fmt.Sprintf("From           %s %s   %s", q.FromTokenAmount, q.FromToken.Symbol, q.FromTokenPriceLine),
 		fmt.Sprintf("Estimated      %s %s", q.EstimatedOutput, q.ToToken.Symbol),
 		fmt.Sprintf("Min received   %s %s   (slippage %.2f%%)", q.MinOutput, q.ToToken.Symbol, q.Slippage),
 	}
-	if q.PriceImpact != "" {
-		lines = append(lines, fmt.Sprintf("Price impact   %s", q.PriceImpact))
-	}
 	if q.NeedsApproval {
 		lines = append(lines, theme.Dim().Render("Note: ERC-20 approval required — will be sent automatically."))
-	}
-	if q.Mode != "api" {
-		lines = append(lines, theme.Dim().Render("t: try API route — best rates across 500+ DEXs (needs LazySwap Pass)"))
 	}
 	if line := m.riskLine(); line != "" {
 		lines = append(lines, "", line)

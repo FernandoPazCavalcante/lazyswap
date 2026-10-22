@@ -54,33 +54,11 @@ func TestParseSwapArgs(t *testing.T) {
 		// validation, so it surfaces as an unknown-flag error.
 		{"negative amount", []string{"-1", "BNB", "USDT"}, "try: lazyswap swap"},
 		{"non-numeric amount", []string{"abc", "BNB", "USDT"}, "positive USD"},
-		{"api+direct conflict", []string{"1", "BNB", "USDT", "--api", "--direct"}, "mutually exclusive"},
 		{"unknown flag", []string{"1", "BNB", "USDT", "--nope"}, "try: lazyswap swap"},
 	}
 	for _, c := range cases {
 		if _, err := parseSwapArgs(c.args); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: err = %v, want containing %q", c.name, err, c.want)
-		}
-	}
-}
-
-func TestResolveSwapMode(t *testing.T) {
-	cases := []struct {
-		setting string
-		args    swapArgs
-		want    string
-	}{
-		{"", swapArgs{}, settings.SwapModeDirect},
-		{settings.SwapModeAPI, swapArgs{}, settings.SwapModeAPI},
-		{settings.SwapModeDirect, swapArgs{}, settings.SwapModeDirect},
-		{"", swapArgs{apiMode: true}, settings.SwapModeAPI},
-		{settings.SwapModeAPI, swapArgs{directMode: true}, settings.SwapModeDirect},
-		{settings.SwapModeDirect, swapArgs{apiMode: true}, settings.SwapModeAPI},
-	}
-	for _, c := range cases {
-		got := resolveSwapMode(settings.Settings{SwapMode: c.setting}, c.args)
-		if got != c.want {
-			t.Errorf("setting=%q args=%+v: got %q want %q", c.setting, c.args, got, c.want)
 		}
 	}
 }
@@ -146,13 +124,6 @@ func TestGoldenQuoteOutput(t *testing.T) {
 	fprintQuote(&buf, c, "0xA502F4896E1b2B93080EabfFC60018b8D089b872", direct)
 	checkGolden(t, "quote_direct", buf.Bytes())
 
-	api := direct
-	api.Mode = "api"
-	api.PriceImpact = "0.08%"
-	api.NeedsApproval = false
-	buf.Reset()
-	fprintQuote(&buf, c, "0xA502F4896E1b2B93080EabfFC60018b8D089b872", api)
-	checkGolden(t, "quote_api", buf.Bytes())
 }
 
 func TestGoldenUsage(t *testing.T) {

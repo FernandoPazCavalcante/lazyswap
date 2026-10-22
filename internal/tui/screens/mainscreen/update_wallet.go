@@ -1,9 +1,13 @@
 package mainscreen
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/seedoverlay"
 	walletpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/wallet"
+	walletpkg "github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
 
 // handleWalletMsg handles wallet CRUD results, balance fetches, and wallet
@@ -25,6 +29,11 @@ func (m Model) handleWalletMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 	case balancesFetchedMsg:
 		next, cmd := m.onBalancesFetched(msg)
 		return next, cmd, true
+	case seedoverlay.ConfirmedMsg:
+		return m, saveConfirmedCmd(m.svc, msg.Phrase), true
+	case seedoverlay.CloseMsg:
+		m.mode = modeNormal
+		return m, nil, true
 	case walletpanel.SelectionChangedMsg:
 		next, cmd := m.onWalletSelected(msg)
 		return next, cmd, true
@@ -99,5 +108,42 @@ func (m Model) onWalletSelected(msg walletpanel.SelectionChangedMsg) (Model, tea
 	if msg.Wallet != nil {
 		m.persistDefaultWallet(msg.Wallet.Address)
 	}
-	return m, tea.Batch(m.balancesCmdForCurrent(), m.refreshPassCmd())
+	return m, m.balancesCmdForCurrent()
+}
+
+// openBackupOverlay generates a phrase (not yet saved) and asks the user to
+// prove they wrote it down before the wallet exists.
+func (m Model) openBackupOverlay() (Model, tea.Cmd) {
+	phrase, err := walletpkg.GenerateMnemonic()
+	if err == nil {
+		var picks [2]int
+		if picks, err = seedoverlay.RandomPicks(len(strings.Fields(phrase))); err == nil {
+			m.seed = seedoverlay.NewBackup(phrase, picks)
+			m.seed.SetSize(m.width, m.height)
+			m.mode = modeSeed
+			return m, m.seed.Init()
+		}
+	}
+	m.mode = modeNormal
+	m.errMsg = "create: " + err.Error()
+	return m, nil
+}
+
+// openRevealOverlay shows the selected wallet's phrase after re-checking the
+// password against the store.
+func (m Model) openRevealOverlay() (Model, tea.Cmd) {
+	if m.current == nil || m.dao == nil {
+		return m, nil
+	}
+	dao, addr := m.dao, m.current.Address
+	m.seed = seedoverlay.NewReveal(addr, func(pw string) (string, error) {
+		c, err := walletpkg.Unlock(dao, pw)
+		if err != nil {
+			return "", err
+		}
+		return walletpkg.NewService(dao, c).Reveal(addr)
+	})
+	m.seed.SetSize(m.width, m.height)
+	m.mode = modeSeed
+	return m, m.seed.Init()
 }

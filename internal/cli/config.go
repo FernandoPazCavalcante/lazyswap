@@ -31,8 +31,6 @@ func runConfig(args []string) int {
 		return setChain(dao, args)
 	case "set-slippage":
 		return setSlippage(dao, args)
-	case "set-swap-mode":
-		return setSwapMode(dao, args)
 	default:
 		return die("unknown config subcommand %q", sub)
 	}
@@ -48,14 +46,9 @@ func showConfig(dao *wallet.DAO) int {
 	if walletAddr == "" {
 		walletAddr = "(unset — uses the only wallet, or pass --wallet)"
 	}
-	mode := st.SwapMode
-	if mode == "" {
-		mode = "direct (default)"
-	}
 	fmt.Printf("chain      %s (%s)\n", st.ChainKey, chain.Get(st.ChainKey).Name)
 	fmt.Printf("slippage   %s%%\n", strconv.FormatFloat(st.Slippage, 'f', -1, 64))
 	fmt.Printf("wallet     %s\n", walletAddr)
-	fmt.Printf("swap mode  %s\n", mode)
 	return 0
 }
 
@@ -100,45 +93,5 @@ func setSlippage(dao *wallet.DAO, args []string) int {
 		return die("%v", err)
 	}
 	fmt.Printf("default slippage set to %s%%\n", args[1])
-	return 0
-}
-
-// setSwapMode handles `config set-swap-mode <direct|api>`.
-func setSwapMode(dao *wallet.DAO, args []string) int {
-	if len(args) != 2 {
-		return die("usage: lazyswap config set-swap-mode <direct|api>")
-	}
-	if err := settings.SetSwapMode(dao, args[1]); err != nil {
-		return die("%v", err)
-	}
-	fmt.Printf("swap mode set to %s\n", args[1])
-	return 0
-}
-
-// runWallets lists every wallet address. Addresses are stored plaintext, so
-// this needs no password.
-func runWallets(_ []string) int {
-	dao, err := wallet.Open()
-	if err != nil {
-		return die("open database: %v", err)
-	}
-	defer func() { _ = dao.Close() }()
-
-	ws, err := dao.FetchAll()
-	if err != nil {
-		return die("fetch wallets: %v", err)
-	}
-	if len(ws) == 0 {
-		fmt.Println("no wallets yet — create one in the TUI (`lazyswap`)")
-		return 0
-	}
-	st, _ := settings.Load(dao)
-	for _, w := range ws {
-		marker := "  "
-		if w.Address == st.DefaultWallet {
-			marker = "* "
-		}
-		fmt.Printf("%s%s\n", marker, w.Address)
-	}
 	return 0
 }

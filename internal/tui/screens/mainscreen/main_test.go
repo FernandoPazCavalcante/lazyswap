@@ -9,7 +9,7 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap/internal/crypto"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/importoverlay"
-	passpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/lazyswappass"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/seedoverlay"
 	settingspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/settings"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
@@ -28,7 +28,7 @@ func newModel(t *testing.T) Model {
 	c, _ := crypto.New(key)
 	svc := wallet.NewService(dao, c)
 
-	m := New(svc, nil, nil, nil, dao, settings.Defaults()) // nil balance/swap/pass services — RPC not exercised in unit tests
+	m := New(svc, nil, nil, dao, settings.Defaults()) // nil balance/swap/pass services — RPC not exercised in unit tests
 	m.SetSize(120, 30)
 	return m
 }
@@ -50,23 +50,64 @@ func TestNKeyDuringConfirmCreateCancels(t *testing.T) {
 	}
 }
 
-func TestYKeyDuringConfirmCreateIssuesCommand(t *testing.T) {
+// 'y' must not save anything: the wallet only exists once the backup quiz is
+// passed, so a user can never fund a wallet whose phrase they never saw.
+func TestYKeyDuringConfirmCreateOpensBackupWithoutSaving(t *testing.T) {
 	m := newModel(t)
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	if m.mode != modeSeed || m.seed.Step() != "show" {
+		t.Fatalf("mode = %v step = %q, want backup overlay on the phrase", m.mode, m.seed.Step())
+	}
+	if ws, _ := m.dao.FetchAll(); len(ws) != 0 {
+		t.Fatalf("wallet saved before backup was confirmed: %d rows", len(ws))
+	}
+}
+
+func TestBackupConfirmedSavesWallet(t *testing.T) {
+	m := newModel(t)
+	m.mode = modeSeed
+	_, cmd := m.Update(seedoverlay.ConfirmedMsg{Phrase: hardhatPhrase})
 	if cmd == nil {
-		t.Fatalf("expected a create command")
+		t.Fatal("expected a save command")
 	}
-	msg := cmd()
-	cm, ok := msg.(createdMsg)
-	if !ok {
-		t.Fatalf("expected createdMsg, got %T", msg)
+	cm, ok := cmd().(createdMsg)
+	if !ok || cm.err != nil || cm.w == nil {
+		t.Fatalf("save failed: %#v", cm)
 	}
-	if cm.err != nil {
-		t.Fatalf("create failed: %v", cm.err)
+	if ws, _ := m.dao.FetchAll(); len(ws) != 1 {
+		t.Fatalf("rows = %d, want 1", len(ws))
 	}
-	if cm.w == nil || cm.w.Address == "" {
-		t.Fatalf("created wallet missing")
+}
+
+func TestBackupAbandonedSavesNothing(t *testing.T) {
+	m := newModel(t)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = m.Update(cmd())
+	if m.mode != modeNormal {
+		t.Fatalf("mode = %v, want normal", m.mode)
+	}
+	if ws, _ := m.dao.FetchAll(); len(ws) != 0 {
+		t.Fatalf("abandoned backup saved %d wallets", len(ws))
+	}
+}
+
+func TestBKeyOpensRevealForCurrentWallet(t *testing.T) {
+	m := newModel(t)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	if m.mode != modeNormal {
+		t.Fatalf("b with no wallet should stay normal; got %v", m.mode)
+	}
+	w, err := m.svc.Import(hardhatPhrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.current = w
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	if m.mode != modeSeed || m.seed.Step() != "password" {
+		t.Fatalf("mode = %v step = %q, want reveal overlay asking for the password", m.mode, m.seed.Step())
 	}
 }
 
@@ -184,41 +225,5 @@ func TestWalletQRModeEscCloses(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if m.mode != modeNormal {
 		t.Fatalf("after esc mode = %v, want modeNormal", m.mode)
-	}
-}
-
-func TestPassTabRegistered(t *testing.T) {
-	m := newModel(t)
-	if !m.tabExists(int(tabPass)) {
-		t.Fatal("tabPass (6) should be an available tab")
-	}
-	var found bool
-	for _, tb := range m.availableTabs() {
-		if tb.Num == int(tabPass) && tb.Label == "Lazyswap Pass" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal(`availableTabs missing {6, "Lazyswap Pass"}`)
-	}
-}
-
-func TestNumberSixSwitchesToPassTab(t *testing.T) {
-	m := modelWithWallet(t)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'6'}})
-	if m.activeTab != tabPass {
-		t.Fatalf("activeTab = %v, want tabPass", m.activeTab)
-	}
-	if m.focus != focusRight {
-		t.Fatalf("focus = %v, want focusRight", m.focus)
-	}
-}
-
-func TestBuyRequestWithoutServiceIsNoop(t *testing.T) {
-	// newModel wires a nil pass service; a buy request must be guarded, not panic.
-	m := modelWithWallet(t)
-	_, cmd := m.Update(passpanel.BuyRequestMsg{})
-	if cmd != nil {
-		t.Fatal("buy request with no pass service should issue no command")
 	}
 }

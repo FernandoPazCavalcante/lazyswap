@@ -24,7 +24,7 @@ func TestCLIQuoteOnly(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("config show exited %d:\n%s", code, out)
 	}
-	mustContain(t, out, "chain", "slippage", "swap mode")
+	mustContain(t, out, "chain", "slippage", "wallet")
 
 	// Quote against the live BSC mainnet router — read-only, no funds, nothing
 	// signed. (bsc_testnet is not usable here: its configured router has no
@@ -32,7 +32,7 @@ func TestCLIQuoteOnly(t *testing.T) {
 	// RPC flake is the dominant failure mode, not our code.
 	retry(t, 3, func() error {
 		out, code := runCLI(t, "swap", "0.50", "BNB", "USDT",
-			"--chain", "bsc", "--direct", "--quote-only", "--no-safety")
+			"--chain", "bsc", "--quote-only", "--no-safety")
 		if code != 0 {
 			return fmt.Errorf("exit %d:\n%s", code, out)
 		}

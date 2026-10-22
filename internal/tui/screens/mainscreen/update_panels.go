@@ -6,48 +6,9 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
-	passpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/lazyswappass"
 	settingspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/settings"
 	swapbtcpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/swapbtc"
 )
-
-// handlePassMsg handles Lazyswap Pass buy requests and mint / status results.
-// handled=false for any other message.
-func (m Model) handlePassMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
-	switch msg := msg.(type) {
-	case passpanel.BuyRequestMsg:
-		if m.current == nil || m.passSvc == nil {
-			return m, nil, true
-		}
-		applog.Tracef("mainscreen — minting pass for %s", m.current.Address)
-		m.pass.SetBuying(true)
-		return m, mintPassCmd(m.passSvc, m.current.PrivateKey), true
-	case passBoughtMsg:
-		if msg.err != nil {
-			applog.Error("pass mint", msg.err)
-			m.pass.SetError(msg.err.Error())
-			return m, nil, true
-		}
-		applog.Infof("pass minted tx=%s", msg.txHash)
-		// Re-read status so the panel flips to "active" with the new expiry.
-		return m, m.refreshPassCmd(), true
-	case passStatusMsg:
-		if msg.err != nil {
-			m.pass.SetError(msg.err.Error())
-			return m, nil, true
-		}
-		m.pass.SetStatus(msg.status)
-		return m, nil, true
-	case referralStatsMsg:
-		if msg.err != nil {
-			m.referral.SetError(msg.err.Error())
-			return m, nil, true
-		}
-		m.referral.SetStats(msg.stats)
-		return m, nil, true
-	}
-	return m, nil, false
-}
 
 // handleSwapBTCMsg handles Swap BTC tab requests and THORchain results.
 // handled=false for any other message.
@@ -123,7 +84,6 @@ func (m Model) onNetworkChange(msg settingspanel.NetworkChangeMsg) (Model, tea.C
 		c := chain.Get(msg.ChainKey)
 		m.chainKey = msg.ChainKey
 		m.settings.SetNetwork(msg.ChainKey, c.Name)
-		m.pass.SetAvailable(c.PassAddress != "", c.NativeSymbol)
 		m.persistChain(msg.ChainKey)
 		return m, nil
 	}
@@ -141,18 +101,13 @@ func (m Model) onChainSwitched(msg chainSwitchedMsg) (Model, tea.Cmd) {
 	if m.flowSvc != nil {
 		m.flowSvc.Close()
 	}
-	if m.passSvc != nil {
-		m.passSvc.Close()
-	}
 	m.chainKey = msg.chainKey
 	m.balSvc = msg.balSvc
 	m.flowSvc = msg.flowSvc
-	m.passSvc = msg.passSvc
 	c := chain.Get(msg.chainKey)
 	m.settings.SetNetwork(msg.chainKey, c.Name)
-	m.pass.SetAvailable(c.PassAddress != "", c.NativeSymbol)
 	m.persistChain(msg.chainKey)
 	m.balanceCache = make(map[string][]balance.TokenBalance)
 	m.errMsg = ""
-	return m, tea.Batch(m.balancesCmdForCurrent(), m.refreshPassCmd())
+	return m, m.balancesCmdForCurrent()
 }

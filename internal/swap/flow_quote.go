@@ -39,8 +39,10 @@ func (f *Flow) Quote(
 		return FlowQuote{}, err
 	}
 
-	estimated, _ := strconv.ParseFloat(dexQuote.EstimatedOutput, 64)
-	minOutput := strconv.FormatFloat(estimated*(1-slippage/100), 'f', 6, 64)
+	minOutput, err := minOutputFor(dexQuote.EstimatedOutput, slippage, toToken.Decimals)
+	if err != nil {
+		return FlowQuote{}, err
+	}
 
 	needsApproval := false
 	if fromToken.Address != NativeSentinel {

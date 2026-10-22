@@ -62,12 +62,12 @@ func TestRunSwapQuoteOnlyOverFakeRPC(t *testing.T) {
 	seedEncryptedWallet(t)
 
 	out, code := captureStdout(t, func() int {
-		return runSwap([]string{"5", "BNB", "USDT", "--direct", "--quote-only", "--no-safety"})
+		return runSwap([]string{"5", "BNB", "USDT", "--quote-only", "--no-safety"})
 	})
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	for _, marker := range []string{"route     direct", "spend", "receive", "min recv"} {
+	for _, marker := range []string{"spend", "receive", "min recv"} {
 		if !strings.Contains(out, marker) {
 			t.Fatalf("quote output missing %q:\n%s", marker, out)
 		}
@@ -85,7 +85,7 @@ func TestRunSwapExecuteOverFakeRPC(t *testing.T) {
 	seedEncryptedWallet(t)
 
 	out, code := captureStdout(t, func() int {
-		return runSwap([]string{"5", "BNB", "USDT", "--direct", "--yes", "--no-safety"})
+		return runSwap([]string{"5", "BNB", "USDT", "--yes", "--no-safety"})
 	})
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
@@ -95,37 +95,6 @@ func TestRunSwapExecuteOverFakeRPC(t *testing.T) {
 	}
 	if rpc.TxCount != 1 {
 		t.Fatalf("broadcasts = %d, want 1", rpc.TxCount)
-	}
-}
-
-func TestRunSwapAPIModeFallsBackToDirect(t *testing.T) {
-	rpc := testrpc.New()
-	t.Cleanup(rpc.Close)
-	t.Setenv("LAZYSWAP_RPC_URL", rpc.URL)
-	t.Setenv("LAZYSWAP_API_URL", "http://127.0.0.1:1") // unreachable backend
-	seedEncryptedWallet(t)
-
-	// API chosen by SETTING (not --api): must warn on stderr + fall back.
-	_, code := captureStdout(t, func() int { return runConfig([]string{"set-swap-mode", "api"}) })
-	if code != 0 {
-		t.Fatal("set-swap-mode failed")
-	}
-	out, code := captureStdout(t, func() int {
-		return runSwap([]string{"5", "BNB", "USDT", "--quote-only", "--no-safety"})
-	})
-	if code != 0 {
-		t.Fatalf("fallback should still quote, exit %d:\n%s", code, out)
-	}
-	if !strings.Contains(out, "route     direct") {
-		t.Fatalf("expected direct fallback:\n%s", out)
-	}
-
-	// Explicit --api must fail loudly instead.
-	_, code = captureStdout(t, func() int {
-		return runSwap([]string{"5", "BNB", "USDT", "--api", "--quote-only", "--no-safety"})
-	})
-	if code != 1 {
-		t.Fatalf("explicit --api with dead backend: exit %d, want 1", code)
 	}
 }
 

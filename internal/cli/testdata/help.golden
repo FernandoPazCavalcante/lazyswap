@@ -7,13 +7,10 @@ Usage:
   lazyswap config set-wallet <address>  set the default wallet
   lazyswap config set-chain <key>       set the default chain
   lazyswap config set-slippage <pct>    set the default slippage
-  lazyswap config set-swap-mode <mode>  set the swap route: direct | api
   lazyswap wallets                      list wallet addresses
+  lazyswap wallets reveal               print the recovery phrase (asks for the password)
+  lazyswap wallets export --keystore <path>  write an encrypted keystore V3 JSON file
   lazyswap set password                 print an export line; use: eval "$(lazyswap set password)"
-  lazyswap referral code                show (or create) your referral code + invite link
-  lazyswap referral status              referred wallets, earnings, claimable amount
-  lazyswap referral apply <CODE>        bind this wallet to a referrer (once, forever)
-  lazyswap referral claim               sweep claimable earnings into a manual payout
   lazyswap mcp                          serve the MCP server for AI agents (stdio)
   lazyswap help | version
 
@@ -24,19 +21,28 @@ swap flags:
   --yes                skip the y/N confirmation
   --no-safety          skip the pre-swap token risk check
   --safety-block       refuse the swap when token risk is HIGH
-  --api                route via the lazyswap API (best rates; needs a LazySwap Pass)
-  --direct             route directly via the on-chain V2 router (no auth)
   --quote-only         print the quote (and risk check) then exit without executing
 
+wallets reveal / export flags:
+  --address <address>  wallet to use (default: configured default, or the only wallet)
+  --keystore <path>    export: output file; never overwrites an existing one
+  --allow-pipe         reveal: print even when stdout is not a terminal
+
 mcp flags:
-  --allow-trading      register the swap_execute / buy_pass tools (default: read-only)
-  --max-usd <usd>      per-swap USD cap, required with --allow-trading
-  --chain <keys>       comma-separated chain allowlist for trading tools
-  --allow-risky        let swap_execute buy HIGH-risk tokens (default: refuse)
+  --allow-trading        register the swap_execute tool (default: read-only)
+  --max-usd <usd>        per-swap USD cap, required with --allow-trading
+  --max-usd-total <usd>  cumulative budget for the whole run (default: --max-usd)
+  --chain <keys>         comma-separated chain allowlist for trading tools
+  --allow-risky          let swap_execute buy HIGH-risk tokens (default: refuse)
 
 Example:
   lazyswap swap 0.50 BNB USDT     # $0.50 of BNB into USDT on the default chain
 
 Environment:
   LAZYSWAP_PASSWORD    wallet password (skips the interactive prompt)
+  LAZYSWAP_KEYSTORE_PASSPHRASE  passphrase for "wallets export" (skips the prompt)
   LAZYSWAP_DATA_DIR    data directory (default ~/.lazyswap)
+  LAZYSWAP_RPC_URL     override every chain's RPC endpoint
+  LAZYSWAP_THORNODE_URL  override the THORNode API endpoint
+  LAZYSWAP_API_URL     override the price-monitor backend
+  LAZYSWAP_TEST        set to 1 to send the app log to /dev/null

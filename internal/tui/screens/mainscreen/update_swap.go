@@ -6,7 +6,6 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
-	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/importoverlay"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/swapoverlay"
 )
@@ -26,9 +25,6 @@ func (m Model) handleSwapMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	case swapoverlay.QuoteRequestMsg:
 		next, cmd := m.onSwapQuoteRequest(msg)
-		return next, cmd, true
-	case swapoverlay.ModeToggleMsg:
-		next, cmd := m.onSwapModeToggle(msg)
 		return next, cmd, true
 	case swapoverlay.ExecuteRequestMsg:
 		next, cmd := m.onSwapExecuteRequest(msg)
@@ -61,36 +57,16 @@ func (m Model) onSwapQuoteRequest(msg swapoverlay.QuoteRequestMsg) (Model, tea.C
 	return m, m.quoteCmds(msg.From, msg.To, msg.USDAmount)
 }
 
-func (m Model) onSwapModeToggle(msg swapoverlay.ModeToggleMsg) (Model, tea.Cmd) {
-	if m.current == nil {
-		return m, nil
-	}
-	if m.useAPIRoute() {
-		m.swapMode = settings.SwapModeDirect
-	} else {
-		m.swapMode = settings.SwapModeAPI
-	}
-	m.persistSwapMode(m.swapMode)
-	return m, m.quoteCmds(msg.From, msg.To, msg.USDAmount)
-}
-
 func (m Model) onSwapExecuteRequest(msg swapoverlay.ExecuteRequestMsg) (Model, tea.Cmd) {
 	if m.current == nil {
 		return m, nil
 	}
-	applog.Tracef("mainscreen — executing %s swap %s → %s $%s for %s",
-		m.lastQuoteMode, msg.From.Symbol, msg.To.Symbol, msg.USDAmount, m.current.Address)
-	// Execute over the route that produced the quote the user confirmed.
-	if m.lastQuoteMode == "api" {
-		return m, executeAPICmd(m.apiClient, m.flowSvc, m.chainKey, m.current.PrivateKey, msg.From, msg.To, msg.USDAmount, m.slippage)
-	}
+	applog.Tracef("mainscreen — executing swap %s → %s $%s for %s",
+		msg.From.Symbol, msg.To.Symbol, msg.USDAmount, m.current.Address)
 	return m, executeSwapCmd(m.flowSvc, m.current.PrivateKey, msg.From, msg.To, msg.USDAmount, m.slippage)
 }
 
 func (m Model) onSwapQuoteResult(msg swapQuoteMsg) (Model, tea.Cmd) {
-	if msg.err == nil {
-		m.lastQuoteMode = msg.quote.Mode
-	}
 	pending := msg.err == nil && safety.ShouldCheck(chain.Get(m.chainKey), msg.quote.ToToken)
 	m.swap, _ = m.swap.Update(swapoverlay.QuoteResultMsg{Quote: msg.quote, Err: msg.err, SafetyPending: pending})
 	return m, nil

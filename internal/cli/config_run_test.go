@@ -31,7 +31,7 @@ func TestRunConfigShowDefaults(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	for _, marker := range []string{"chain", "bsc", "slippage", "0.5%", "swap mode", "direct (default)"} {
+	for _, marker := range []string{"chain", "bsc", "slippage", "0.5%"} {
 		if !strings.Contains(out, marker) {
 			t.Fatalf("show output missing %q:\n%s", marker, out)
 		}
@@ -51,8 +51,6 @@ func TestRunConfigSetters(t *testing.T) {
 		{"set-slippage valid", []string{"set-slippage", "1.5"}, 0},
 		{"set-slippage NaN", []string{"set-slippage", "abc"}, 1},
 		{"set-slippage out of range", []string{"set-slippage", "150"}, 1},
-		{"set-swap-mode api", []string{"set-swap-mode", "api"}, 0},
-		{"set-swap-mode bogus", []string{"set-swap-mode", "bogus"}, 1},
 		{"set-wallet unknown", []string{"set-wallet", "0xNoSuchWallet"}, 1},
 		{"unknown subcommand", []string{"frobnicate"}, 1},
 		{"missing argument", []string{"set-chain"}, 1},
@@ -66,7 +64,7 @@ func TestRunConfigSetters(t *testing.T) {
 
 	// The setters actually persisted.
 	out, _ := captureStdout(t, func() int { return runConfig([]string{"show"}) })
-	if !strings.Contains(out, "ethereum") || !strings.Contains(out, "1.5%") || !strings.Contains(out, "api") {
+	if !strings.Contains(out, "ethereum") || !strings.Contains(out, "1.5%") {
 		t.Fatalf("persisted settings not reflected:\n%s", out)
 	}
 }

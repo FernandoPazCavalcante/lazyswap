@@ -47,9 +47,6 @@ func (m Model) handleAppMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 	if next, cmd, handled := m.handleSwapMsg(msg); handled {
 		return next, cmd, true
 	}
-	if next, cmd, handled := m.handlePassMsg(msg); handled {
-		return next, cmd, true
-	}
 	if next, cmd, handled := m.handleSwapBTCMsg(msg); handled {
 		return next, cmd, true
 	}
@@ -71,6 +68,10 @@ func (m Model) handleModeMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		var cmd tea.Cmd
 		m.swap, cmd = m.swap.Update(msg)
 		return m, cmd, true
+	case modeSeed:
+		var cmd tea.Cmd
+		m.seed, cmd = m.seed.Update(msg)
+		return m, cmd, true
 	case modeConfirmCreate:
 		next, cmd := m.updateConfirmCreate(msg)
 		return next, cmd, true
@@ -87,7 +88,7 @@ func (m Model) handleModeMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 func (m Model) updateConfirmCreate(msg tea.Msg) (Model, tea.Cmd) {
 	if k, ok := msg.(tea.KeyMsg); ok {
 		if k.String() == "y" || k.String() == "Y" {
-			return m, createCmd(m.svc)
+			return m.openBackupOverlay()
 		}
 		m.mode = modeNormal
 	}
@@ -141,10 +142,6 @@ func (m Model) routeToActiveTab(msg tea.Msg) (Model, tea.Cmd) {
 	case tabSwapBTC:
 		var cmd tea.Cmd
 		m.swapbtc, cmd = m.swapbtc.Update(msg)
-		return m, cmd
-	case tabPass:
-		var cmd tea.Cmd
-		m.pass, cmd = m.pass.Update(msg)
 		return m, cmd
 	default:
 		var cmd tea.Cmd

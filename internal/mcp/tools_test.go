@@ -107,7 +107,7 @@ func TestSwapQuoteOverFakeRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("swapQuote: %v", err)
 	}
-	if out.USDAmountFormatted != "$5.00" || out.Mode != "direct" {
+	if out.USDAmountFormatted != "$5.00" {
 		t.Fatalf("quote wrong: %+v", out.FlowQuote)
 	}
 	// Buying a stablecoin skips the risk check entirely.
@@ -134,30 +134,6 @@ func TestGetBalancesOverFakeRPC(t *testing.T) {
 	}
 	if out.Balances[0].Symbol != "BNB" {
 		t.Fatalf("first row must be native: %+v", out.Balances[0])
-	}
-}
-
-func TestGetPassStatusOverFakeRPC(t *testing.T) {
-	rpc := testrpc.New()
-	t.Cleanup(rpc.Close)
-	t.Setenv("LAZYSWAP_RPC_URL", rpc.URL)
-
-	s := newTestServer(t, Options{})
-	if err := s.dao.Insert(&wallet.Wallet{ID: "w1", Address: "0xA502F4896E1b2B93080EabfFC60018b8D089b872", PrivateKey: "enc"}); err != nil {
-		t.Fatal(err)
-	}
-	// bsc has no pass contract → inert, Deployed=false.
-	_, out, err := s.getPassStatus(context.Background(), nil, passIn{Chain: "bsc"})
-	if err != nil || out.Deployed {
-		t.Fatalf("bsc must be inert: %+v err=%v", out, err)
-	}
-	// bsc_testnet has the contract; fake RPC reports zero balance.
-	_, out, err = s.getPassStatus(context.Background(), nil, passIn{Chain: "bsc_testnet"})
-	if err != nil {
-		t.Fatalf("testnet status: %v", err)
-	}
-	if !out.Deployed || out.HasValidPass {
-		t.Fatalf("expected deployed + no pass: %+v", out)
 	}
 }
 

@@ -17,7 +17,6 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	apiclient "github.com/FernandoPazCavalcante/lazyswap/internal/api"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
@@ -28,8 +27,9 @@ import (
 
 // Options configure the MCP server surface.
 type Options struct {
-	AllowTrading bool     // register swap_execute / buy_pass
+	AllowTrading bool     // register swap_execute
 	MaxUSD       float64  // per-swap USD cap; required > 0 when AllowTrading
+	MaxUSDTotal  float64  // cumulative USD budget for the server's lifetime; 0 = same as MaxUSD
 	Chains       []string // allowlist for trading tools; empty = any configured chain
 	AllowRisky   bool     // let swap_execute buy HIGH-risk tokens (default: refuse)
 	Version      string
@@ -43,11 +43,39 @@ type server struct {
 	opts   Options
 	pw     string // LAZYSWAP_PASSWORD; verified at startup when trading is enabled
 	safety *safety.Service
-	api    *apiclient.Client
 
 	mu    sync.Mutex
 	flows map[string]*swap.Flow
 	bals  map[string]*balance.Service
+
+	// spentUSD accumulates every executed swap for the lifetime of this
+	// process. A per-swap cap alone is a rate limit, not a budget: an agent
+	// acting on an injected instruction can call swap_execute in a loop and
+	// the loss is unbounded. Guarded by mu.
+	spentUSD float64
+}
+
+// budget returns the cumulative USD ceiling for this server.
+func (s *server) budget() float64 {
+	if s.opts.MaxUSDTotal > 0 {
+		return s.opts.MaxUSDTotal
+	}
+	return s.opts.MaxUSD
+}
+
+// reserve books amountUSD against the cumulative budget, returning the
+// remaining budget when it does not fit. It is called before signing, so a
+// failed swap still consumes budget — the conservative direction: an agent
+// cannot retry its way past the ceiling by provoking failures.
+func (s *server) reserve(amountUSD float64) (remaining float64, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	left := s.budget() - s.spentUSD
+	if amountUSD > left {
+		return left, false
+	}
+	s.spentUSD += amountUSD
+	return s.budget() - s.spentUSD, true
 }
 
 // Run validates options, opens the wallet DAO and serves MCP over stdio until
@@ -55,6 +83,9 @@ type server struct {
 func Run(ctx context.Context, opts Options) error {
 	if opts.AllowTrading && opts.MaxUSD <= 0 {
 		return errors.New("--allow-trading requires --max-usd > 0")
+	}
+	if opts.MaxUSDTotal > 0 && opts.MaxUSDTotal < opts.MaxUSD {
+		return fmt.Errorf("--max-usd-total ($%v) cannot be below --max-usd ($%v)", opts.MaxUSDTotal, opts.MaxUSD)
 	}
 	for _, k := range opts.Chains {
 		if !chain.Has(k) {
@@ -73,7 +104,6 @@ func Run(ctx context.Context, opts Options) error {
 		opts:   opts,
 		pw:     os.Getenv("LAZYSWAP_PASSWORD"),
 		safety: safety.New(),
-		api:    apiclient.New(""),
 		flows:  map[string]*swap.Flow{},
 		bals:   map[string]*balance.Service{},
 	}
@@ -112,45 +142,6 @@ func (s *server) chainKey(explicit string) (string, error) {
 // tradingChainAllowed reports whether trading tools may act on the chain.
 func (s *server) tradingChainAllowed(key string) bool {
 	return len(s.opts.Chains) == 0 || slices.Contains(s.opts.Chains, key)
-}
-
-// swapMode resolves the route: explicit argument > persisted setting > direct.
-func (s *server) swapMode(explicit string) (string, error) {
-	switch explicit {
-	case settings.SwapModeDirect, settings.SwapModeAPI:
-		return explicit, nil
-	case "":
-	default:
-		return "", fmt.Errorf(`mode must be "direct" or "api", got %q`, explicit)
-	}
-	st, err := settings.Load(s.dao)
-	if err != nil {
-		return "", err
-	}
-	if st.SwapMode != "" {
-		return st.SwapMode, nil
-	}
-	return settings.SwapModeDirect, nil
-}
-
-// apiAuthed returns the shared API client, running SIWE with the wallet's key
-// on first use. Signing needs the decrypted key, so API mode is only available
-// when trading is enabled (LAZYSWAP_PASSWORD present).
-func (s *server) apiAuthed(ctx context.Context, walletHint string) (*apiclient.Client, error) {
-	if s.api.Authenticated() {
-		return s.api, nil
-	}
-	if !s.opts.AllowTrading {
-		return nil, errors.New("api mode needs --allow-trading: SIWE auth signs with the wallet key")
-	}
-	w, err := s.unlockWallet(walletHint)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.api.Authenticate(ctx, w.Address, w.PrivateKey); err != nil {
-		return nil, err
-	}
-	return s.api, nil
 }
 
 // slippage resolves the effective slippage: explicit (>0) > configured default.

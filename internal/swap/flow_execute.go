@@ -47,8 +47,10 @@ func (f *Flow) Execute(
 	if err != nil {
 		return failResult(fromToken, toToken, usdAmount, err.Error())
 	}
-	estimated, _ := strconv.ParseFloat(dexQuote.EstimatedOutput, 64)
-	minOutput := strconv.FormatFloat(estimated*(1-slippage/100), 'f', 6, 64)
+	minOutput, err := minOutputFor(dexQuote.EstimatedOutput, slippage, toToken.Decimals)
+	if err != nil {
+		return failResult(fromToken, toToken, usdAmount, err.Error())
+	}
 
 	result, err := executor.ExecuteFullSwap(ctx, fromToken.Address, toToken.Address, fromTokenAmount, minOutput, slippage)
 	if err != nil {

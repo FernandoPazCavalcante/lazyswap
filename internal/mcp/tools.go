@@ -10,9 +10,8 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	apiclient "github.com/FernandoPazCavalcante/lazyswap/internal/api"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
-	"github.com/FernandoPazCavalcante/lazyswap/internal/pass"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/safety"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
@@ -37,29 +36,46 @@ const explorerAPIKeyEnv = "LAZYSWAP_EXPLORER_API_KEY"
 // register adds every tool to srv. Trading tools (swap_execute, buy_pass) are
 // registered only when Options.AllowTrading is set — absent tools cannot be
 // called by a prompt-injected agent.
+// readOnly / destructive build the annotation blocks. The hints are not
+// decoration: MCP hosts use them to decide auto-permissions, so readOnlyHint
+// is what lets a balance lookup run without a prompt, and destructiveHint is
+// what makes the host ask a human before a swap.
+func readOnly(title string) *sdk.ToolAnnotations {
+	return &sdk.ToolAnnotations{Title: title, ReadOnlyHint: true}
+}
+
+func destructive(title string) *sdk.ToolAnnotations {
+	yes := true
+	return &sdk.ToolAnnotations{Title: title, DestructiveHint: &yes}
+}
+
 func (s *server) register(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{Name: "list_chains",
+		Annotations: readOnly("List supported chains"),
 		Description: "List supported chains with their swappable token symbols."}, s.listChains)
 	sdk.AddTool(srv, &sdk.Tool{Name: "get_wallets",
+		Annotations: readOnly("List wallet addresses"),
 		Description: "List wallet addresses (never private keys)."}, s.getWallets)
 	sdk.AddTool(srv, &sdk.Tool{Name: "get_balances",
+		Annotations: readOnly("Fetch token balances"),
 		Description: "Fetch token balances (with USD values) for a wallet on a chain."}, s.getBalances)
 	sdk.AddTool(srv, &sdk.Tool{Name: "swap_quote",
+		Annotations: readOnly("Quote a swap"),
 		Description: "Quote a swap in USD terms: token amounts, estimated/min output. Read-only, does not trade."}, s.swapQuote)
 	sdk.AddTool(srv, &sdk.Tool{Name: "get_settings",
+		Annotations: readOnly("Read settings"),
 		Description: "Read the persisted settings: chain, slippage, default wallet."}, s.getSettings)
 	sdk.AddTool(srv, &sdk.Tool{Name: "set_settings",
+		Annotations: &sdk.ToolAnnotations{Title: "Update settings", IdempotentHint: true},
 		Description: "Update persisted settings: default chain, slippage percent, default wallet."}, s.setSettings)
-	sdk.AddTool(srv, &sdk.Tool{Name: "get_pass_status",
-		Description: "Check LazySwapPass (ERC-721) validity and expiry for a wallet."}, s.getPassStatus)
-	sdk.AddTool(srv, &sdk.Tool{Name: "get_referral_stats",
-		Description: "Referral dashboard: code, referred wallets, earned/claimable USD. Read-only; needs --allow-trading (SIWE auth signs with the wallet key)."}, s.getReferralStats)
 
 	if s.opts.AllowTrading {
 		sdk.AddTool(srv, &sdk.Tool{Name: "swap_execute",
-			Description: fmt.Sprintf("Execute an on-chain swap. Capped at $%.2f per swap. Quotes first via swap_quote are recommended.", s.opts.MaxUSD)}, s.swapExecute)
-		sdk.AddTool(srv, &sdk.Tool{Name: "buy_pass",
-			Description: "Mint a LazySwapPass NFT for the wallet (costs the on-chain mint price plus gas)."}, s.buyPass)
+			Annotations: destructive("Execute an on-chain swap (moves funds)"),
+			Description: fmt.Sprintf(
+				"Execute an on-chain swap. Irreversible: it signs and broadcasts a transaction. "+
+					"Capped at $%.2f per swap and $%.2f cumulatively for this server run. "+
+					"Quote first with swap_quote.", s.opts.MaxUSD, s.budget())}, s.swapExecute)
 	}
 }
 
@@ -194,7 +210,6 @@ type swapIn struct {
 	Slippage float64 `json:"slippage,omitempty" jsonschema:"slippage percent; omit for the configured default"`
 	Wallet   string  `json:"wallet,omitempty" jsonschema:"wallet address (default: configured default wallet)"`
 	Chain    string  `json:"chain,omitempty" jsonschema:"chain key (default: configured chain)"`
-	Mode     string  `json:"mode,omitempty" jsonschema:"swap route: direct (on-chain V2 router) or api (OpenOcean best rate, needs LazySwap Pass); default: configured"`
 }
 
 // resolveSwap maps a swapIn to everything a quote or execute needs.
@@ -241,7 +256,6 @@ func (s *server) swapQuote(ctx context.Context, req *sdk.CallToolRequest, in swa
 	if err != nil {
 		return nil, swapQuoteOut{}, err
 	}
-	mode, err := s.swapMode(in.Mode)
 	if err != nil {
 		return nil, swapQuoteOut{}, err
 	}
@@ -256,22 +270,9 @@ func (s *server) swapQuote(ctx context.Context, req *sdk.CallToolRequest, in swa
 	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	var q swap.FlowQuote
-	if mode == settings.SwapModeAPI {
-		ac, err := s.apiAuthed(ctx, in.Wallet)
-		if err != nil {
-			return nil, swapQuoteOut{}, err
-		}
-		q, err = apiclient.QuoteFlow(ctx, ac, f, chain.Get(key), from, to, usd, slip)
-		if err != nil {
-			return nil, swapQuoteOut{}, err
-		}
-	} else {
-		q, err = f.Quote(ctx, from, to, usd, slip, w.Address)
-		if err != nil {
-			return nil, swapQuoteOut{}, err
-		}
-		q.Mode = settings.SwapModeDirect
+	q, err := f.Quote(ctx, from, to, usd, slip, w.Address)
+	if err != nil {
+		return nil, swapQuoteOut{}, err
 	}
 	return nil, swapQuoteOut{FlowQuote: q, Safety: s.riskReport(ctx, key, to)}, nil
 }
@@ -284,8 +285,19 @@ func (s *server) swapExecute(ctx context.Context, req *sdk.CallToolRequest, in s
 	// Code-enforced guardrails: a prompt-injected agent cannot exceed the cap
 	// or leave the allowlisted chains.
 	if in.USD > s.opts.MaxUSD {
-		return nil, swap.FlowResult{}, fmt.Errorf("refused: $%v exceeds the --max-usd cap of $%v", in.USD, s.opts.MaxUSD)
+		applog.Infof("mcp swap_execute REFUSED (per-swap cap) usd=%v cap=%v", in.USD, s.opts.MaxUSD)
+		return nil, swap.FlowResult{}, fmt.Errorf("refused: $%v exceeds the --max-usd per-swap cap of $%v", in.USD, s.opts.MaxUSD)
 	}
+	// Cumulative budget: the control that makes the cap a budget rather than a
+	// rate limit. Booked before signing, so a loop cannot outrun it.
+	remaining, ok := s.reserve(in.USD)
+	if !ok {
+		applog.Infof("mcp swap_execute REFUSED (budget exhausted) usd=%v remaining=%v", in.USD, remaining)
+		return nil, swap.FlowResult{}, fmt.Errorf(
+			"refused: $%v exceeds the remaining session budget of $%v (--max-usd-total $%v, already spent $%v)",
+			in.USD, remaining, s.budget(), s.budget()-remaining)
+	}
+	applog.Infof("mcp swap_execute allowed usd=%v remaining budget=%v", in.USD, remaining)
 	if !s.tradingChainAllowed(key) {
 		return nil, swap.FlowResult{}, fmt.Errorf("refused: trading on %q is not in the --chain allowlist %v", key, s.opts.Chains)
 	}
@@ -295,7 +307,6 @@ func (s *server) swapExecute(ctx context.Context, req *sdk.CallToolRequest, in s
 	if rep := s.riskReport(ctx, key, to); rep != nil && rep.Level == safety.LevelHigh && !s.opts.AllowRisky {
 		return nil, swap.FlowResult{}, fmt.Errorf("refused: token risk is HIGH (%s) — restart with --allow-risky to override", strings.Join(flagDescs(rep.Flags), "; "))
 	}
-	mode, err := s.swapMode(in.Mode)
 	if err != nil {
 		return nil, swap.FlowResult{}, err
 	}
@@ -310,19 +321,12 @@ func (s *server) swapExecute(ctx context.Context, req *sdk.CallToolRequest, in s
 	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	var res swap.FlowResult
-	if mode == settings.SwapModeAPI {
-		ac, err := s.apiAuthed(ctx, in.Wallet)
-		if err != nil {
-			return nil, swap.FlowResult{}, err
-		}
-		res = apiclient.ExecuteFlow(ctx, ac, f, chain.Get(key), w.PrivateKey, from, to, usd, slip)
-	} else {
-		res = f.Execute(ctx, w.PrivateKey, from, to, usd, slip)
-	}
+	res := f.Execute(ctx, w.PrivateKey, from, to, usd, slip)
 	if !res.Success {
+		applog.Infof("mcp swap_execute failed usd=%v err=%s", in.USD, res.Err)
 		return nil, swap.FlowResult{}, fmt.Errorf("swap failed: %s", res.Err)
 	}
+	applog.Infof("mcp swap_execute ok usd=%v tx=%s remaining budget=%v", in.USD, res.TxHash, remaining)
 	return nil, res, nil
 }
 
@@ -373,104 +377,4 @@ func (s *server) setSettings(ctx context.Context, req *sdk.CallToolRequest, in s
 		}
 	}
 	return s.getSettings(ctx, req, getSettingsIn{})
-}
-
-// ---- get_referral_stats ----
-
-type referralStatsIn struct {
-	Wallet string `json:"wallet,omitempty" jsonschema:"wallet address (default: configured default wallet)"`
-}
-
-func (s *server) getReferralStats(ctx context.Context, req *sdk.CallToolRequest, in referralStatsIn) (*sdk.CallToolResult, apiclient.ReferralStats, error) {
-	ac, err := s.apiAuthed(ctx, in.Wallet)
-	if err != nil {
-		return nil, apiclient.ReferralStats{}, err
-	}
-	st, err := ac.ReferralStats(ctx)
-	if err != nil {
-		return nil, apiclient.ReferralStats{}, err
-	}
-	return nil, st, nil
-}
-
-// ---- get_pass_status / buy_pass ----
-
-type passIn struct {
-	Wallet string `json:"wallet,omitempty" jsonschema:"wallet address (default: configured default wallet)"`
-	Chain  string `json:"chain,omitempty" jsonschema:"chain key (default: configured chain)"`
-}
-
-type passStatusOut struct {
-	Chain        string `json:"chain"`
-	Wallet       string `json:"wallet"`
-	Deployed     bool   `json:"deployed" jsonschema:"false when the pass contract is not on this chain"`
-	HasValidPass bool   `json:"hasValidPass"`
-	ExpiresAt    string `json:"expiresAt,omitempty" jsonschema:"RFC3339 expiry of the latest pass"`
-}
-
-func (s *server) getPassStatus(ctx context.Context, req *sdk.CallToolRequest, in passIn) (*sdk.CallToolResult, passStatusOut, error) {
-	key, err := s.chainKey(in.Chain)
-	if err != nil {
-		return nil, passStatusOut{}, err
-	}
-	w, err := s.pickWallet(in.Wallet)
-	if err != nil {
-		return nil, passStatusOut{}, err
-	}
-	out := passStatusOut{Chain: key, Wallet: w.Address}
-	if chain.Get(key).PassAddress == "" {
-		return nil, out, nil
-	}
-	svc, err := pass.New(key)
-	if err != nil {
-		return nil, passStatusOut{}, err
-	}
-	defer svc.Close()
-	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
-	defer cancel()
-	st, err := svc.Status(ctx, w.Address)
-	if err != nil {
-		return nil, passStatusOut{}, err
-	}
-	out.Deployed = true
-	out.HasValidPass = st.HasValidPass
-	if !st.ExpiresAt.IsZero() {
-		out.ExpiresAt = st.ExpiresAt.Format(time.RFC3339)
-	}
-	return nil, out, nil
-}
-
-type buyPassOut struct {
-	Chain  string `json:"chain"`
-	Wallet string `json:"wallet"`
-	TxHash string `json:"txHash"`
-}
-
-func (s *server) buyPass(ctx context.Context, req *sdk.CallToolRequest, in passIn) (*sdk.CallToolResult, buyPassOut, error) {
-	key, err := s.chainKey(in.Chain)
-	if err != nil {
-		return nil, buyPassOut{}, err
-	}
-	if chain.Get(key).PassAddress == "" {
-		return nil, buyPassOut{}, fmt.Errorf("the LazySwapPass contract is not deployed on %q", key)
-	}
-	if !s.tradingChainAllowed(key) {
-		return nil, buyPassOut{}, fmt.Errorf("refused: trading on %q is not in the --chain allowlist %v", key, s.opts.Chains)
-	}
-	w, err := s.unlockWallet(in.Wallet)
-	if err != nil {
-		return nil, buyPassOut{}, err
-	}
-	svc, err := pass.New(key)
-	if err != nil {
-		return nil, buyPassOut{}, err
-	}
-	defer svc.Close()
-	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
-	defer cancel()
-	tx, err := svc.Buy(ctx, w.PrivateKey)
-	if err != nil {
-		return nil, buyPassOut{}, err
-	}
-	return nil, buyPassOut{Chain: key, Wallet: w.Address, TxHash: tx}, nil
 }
