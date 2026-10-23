@@ -1,0 +1,63 @@
+name: Add a chain
+description: Request or claim support for an EVM chain lazyswap does not have yet.
+labels: ["enhancement", "good first issue"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Adding a chain is one entry in `internal/chain/config.go`, one line in
+        `OrderedKeys` (Go maps iterate randomly, so display order lives there),
+        and a row in the table test in `internal/chain/config_test.go`.
+
+        **`StablecoinAddr` is the trap.** It drives all USD pricing — "$50
+        worth of ETH" is computed by asking the configured router how much of
+        that stablecoin $50 buys. If the address you pick has no liquidity path
+        through the router you configured, every quote on that chain is
+        silently wrong: no error, just bad numbers. So the acceptance
+        criterion is not "it compiles" — verify one quote against a known
+        price with `--quote-only` before opening the PR.
+
+        Fill in whatever you know; a request with blanks is still useful.
+  - type: input
+    id: chain
+    attributes:
+      label: Chain
+      placeholder: Base
+    validations:
+      required: true
+  - type: input
+    id: chain-id
+    attributes:
+      label: Chain ID
+      placeholder: "8453"
+  - type: input
+    id: router
+    attributes:
+      label: Uniswap V2-compatible router address
+      description: lazyswap speaks V2 routers only — no V3, no aggregators.
+  - type: input
+    id: wrapped
+    attributes:
+      label: Wrapped native token address
+  - type: input
+    id: stablecoin
+    attributes:
+      label: Stablecoin address for USD pricing
+      description: Must have a liquidity path through the router above. See the note at the top.
+  - type: input
+    id: explorer
+    attributes:
+      label: Explorer API URL
+  - type: input
+    id: rpc
+    attributes:
+      label: A public RPC endpoint
+  - type: dropdown
+    id: claiming
+    attributes:
+      label: Are you planning to open the PR?
+      options:
+        - "Yes, I am claiming this"
+        - "No, requesting it"
+    validations:
+      required: true

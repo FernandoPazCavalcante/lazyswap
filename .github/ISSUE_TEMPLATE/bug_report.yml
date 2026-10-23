@@ -1,0 +1,104 @@
+name: Bug report
+description: Something behaves differently than documented, or than you reasonably expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Never paste secrets into this form
+
+        **Do not include your recovery phrase, your private key, a keystore
+        file, or your lazyswap password.** Nobody needs them to fix a bug, and
+        an issue is public and permanent. No maintainer of this project will
+        ever ask you for them.
+
+        `~/.lazyswap/lazyswap.log` never contains key material, but it does
+        contain your addresses, amounts and transaction hashes — paste only the
+        lines that matter, and redact what you would rather not publish.
+
+        If the bug could cause someone to lose funds, close this form and
+        [report it privately](https://github.com/FernandoPazCavalcante/lazyswap/security/advisories/new)
+        instead.
+  - type: checkboxes
+    id: no-secrets
+    attributes:
+      label: Confirm
+      options:
+        - label: This report contains no recovery phrase, private key, keystore or password.
+          required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How can I reproduce it?
+      description: The exact command, or the keys you pressed in the TUI. Redact addresses if you want to.
+      placeholder: |
+        1. lazyswap swap 5 BNB USDT --quote-only
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or release tag
+      description: >-
+        Output of `lazyswap version`. Released binaries currently report `dev`
+        rather than their tag, so if that is what you get, give the release tag
+        you installed (or the commit, if you built from source).
+      placeholder: v1.0.0-beta.1
+    validations:
+      required: true
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install it?
+      options:
+        - get.lazyswap.app install script
+        - Downloaded a release tarball
+        - go install
+        - Built from source
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and architecture
+      description: Output of `uname -sm`.
+      placeholder: Linux x86_64
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did it happen?
+      options:
+        - TUI
+        - CLI
+        - MCP server
+        - Installer
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: chain
+    attributes:
+      label: Chain
+      description: Leave blank if it is not chain-specific.
+      placeholder: bsc
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output or log lines
+      description: Terminal output, or lines from `~/.lazyswap/lazyswap.log`. Redact freely.
+      render: text
+  - type: textarea
+    id: anything-else
+    attributes:
+      label: Anything else worth knowing?
+      description: Does it happen every time? Did it work on an earlier version?

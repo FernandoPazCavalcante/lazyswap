@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/FernandoPazCavalcante/lazyswap/security/advisories/new
+    about: "Report privately. Please do not open a public issue for anything that could lose someone funds — see SECURITY.md."
+  - name: Question, idea or design discussion
+    url: https://github.com/FernandoPazCavalcante/lazyswap/discussions
+    about: "Open-ended things: how do I, should this work like X, is approach Y worth a PR. A question is not a bother."
+  - name: Looking for something to work on
+    url: https://github.com/FernandoPazCavalcante/lazyswap/contribute
+    about: "Issues labelled good first issue are scoped to one sitting and each names the file to start in."
