@@ -1,17 +1,21 @@
 # CI/CD
 
 ## Backend (Go)
-- **GitHub Actions** — three workflows: `ci.yml` (PR/master), `nightly.yml` (scheduled), `release.yml` (master)
-- **CI pipeline** — lint (golangci-lint), test (coverage ≥70% ex-TUI), e2e smoke (build tag e2e), mutation report (gremlins, report-only)
-- **Nightly** — mutation testing (blocking, ≥50% efficacy), funded e2e on bsc_testnet (when secret set)
-- **Release** — semantic-release v24; cross-compile to linux-x64/arm64, darwin-x64/arm64 (CGO_ENABLED=0); publish tarballs + SHA256 checksums
-- **Branch strategy** — master → beta prereleases; stable → full releases; conventional commits required
+- **CI tool:** GitHub Actions
+- **Workflows:**
+  - **ci.yml** (every PR + push to master): lint (golangci-lint v2.15.0) → test (coverage ≥70% ex-TUI) → e2e smoke (build tag e2e) → mutation report (report-only)
+  - **nightly.yml** (scheduled + manual): mutation test (blocking, ≥50% efficacy) → funded e2e on bsc_testnet (when secret set)
+  - **release.yml** (push to master): cross-compile release tarballs (CGO_ENABLED=0; linux-x64/arm64, darwin-x64/arm64) → semantic-release (Conventional Commits)
+- **Branch strategy:** master (beta prereleases) → stable (full releases)
+- **Local gate:** `make gate` (lint → test → cover)
 
-## Frontend (TypeScript/React)
-- **Deployment** — Wrangler v4 to Cloudflare Workers; build command in wrangler.jsonc runs automatically on Cloudflare side
-- **Local dev** — pnpm dev (Vite HMR); pnpm build → dist/; pnpm preview; pnpm wrangler deploy
+## Frontend (React/Vite)
+- **Build tool:** Vite 6
+- **Package manager:** pnpm (no npm/yarn)
+- **Deployment:** Cloudflare Workers (Wrangler v4); build command in wrangler.jsonc runs automatically on Cloudflare side
 
 ## Smart Contracts (Solidity)
-- **GitHub Actions** — `ci.yml` runs on PR/master: format check (forge fmt --check), build (forge build --sizes), test (FOUNDRY_PROFILE=ci, 1024 fuzz runs), coverage gate (≥70% src/)
-- **Local gates** — make gate (fmt-check → build → test → cover); make lint, make test, make cover, make e2e
-- **Fuzz runs** — 512 locally, 1024 in CI
+- **CI tool:** GitHub Actions
+- **Workflow:** ci.yml (every PR + push to master): format check (forge fmt --check) → build (forge build --sizes) → test (FOUNDRY_PROFILE=ci, 1024 fuzz runs) → coverage gate (src/ ≥70%)
+- **Local gate:** `make gate` (fmt-check → build → test → cover)
+- **Fuzz runs:** 512 locally, 1024 in CI

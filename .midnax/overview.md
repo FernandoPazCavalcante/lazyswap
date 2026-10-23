@@ -1,7 +1,7 @@
 # FernandoPazCavalcante's Org — overview
 
-## LazySwap — Org Identity
+## LazySwap — Organization Identity
 
 **What they build**
 
-LazySwap is a decentralized swap platform spanning terminal and web interfaces. The core product is a Go-based terminal wallet and CLI with Vim-style TUI for executing on-chain swaps across EVM chains (Ethereum, BSC, Polygon, Arbitrum, Base) and cross-chain BTC swaps via THORchain. Supporting infrastructure includes Solidity smart contracts (FeeVault, LazySwapPass ERC-721 pass system) and a React + Vite landing page and installer hosted on Cloudflare Workers. All wallet state is encrypted locally (AES-256-GCM + PBKDF2) in SQLite; no backend server.
+LazySwap is a self-custody DeFi swap platform combining a Go-based terminal wallet and CLI with EVM smart contracts and a React landing page. It enables users to execute token swaps across Ethereum, BSC, and other EVM chains via a TUI interface, with cross-chain BTC swap support through THORchain integration and DEX routing through Uniswap V2, PancakeSwap V2, and OpenOcean aggregator. The platform emphasizes local key management (AES-256-GCM encryption) and fail-closed token risk assessment via GoPlus API.
