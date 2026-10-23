@@ -26,7 +26,8 @@ go test -run TestQuote ./...      # filter by name
 go test -cover ./...              # with coverage
 
 # Release build (cross-compile → dist/)
-bash scripts/build-release.sh     # CGO_ENABLED=0; targets: linux-x64/arm64, darwin-x64/arm64
+bash scripts/build-release.sh           # CGO_ENABLED=0; targets: linux-x64/arm64, darwin-x64/arm64
+bash scripts/build-release.sh v1.2.3    # stamp a version (CI passes the tag; default: git describe)
 
 # Quality gates (see REVIEW.md for thresholds; CI enforces on every PR)
 make setup                   # one-time: installs pinned golangci-lint + gremlins into $GOBIN
@@ -184,7 +185,7 @@ main.go
 - Most packages mirror a TypeScript file in `lazyswap-old/` (noted as `// Mirrors src/...`). When changing behavior, keep parity with the Bun reference unless intentionally diverging.
 
 ### Release
-- Version injected via `-ldflags "-X .../internal/cli.version=..."`. Default: `"dev"`.
+- Version injected via `-ldflags "-X .../internal/cli.version=..."` by `scripts/build-release.sh`, which takes the version as `$1`. semantic-release passes `${nextRelease.gitTag}` through the exec plugin's `prepareCmd`; a local build with no argument falls back to `git describe --tags --always --dirty`. Default inside the source: `"dev"` (what `go build` and `go run` produce).
 - **Conventional Commits** required — semantic-release derives versions from commit history.
 - `master` → `beta` prereleases; `stable` → full releases.
 - **Never commit:** compiled binary (`lazyswap`), `dist/`, `*.db`, `*.log`, `.claude/`.
@@ -211,8 +212,8 @@ Three GitHub Actions workflows:
 2. `funded-e2e` — real tiny swap on `bsc_testnet`; runs only when `LAZYSWAP_E2E_MNEMONIC` secret is set.
 
 **`.github/workflows/release.yml`** — runs on push to `master`:
-1. Runs `scripts/build-release.sh` → cross-compiled tarballs in `dist/` (`CGO_ENABLED=0`; targets: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`).
-2. Runs `npx semantic-release@24` → creates GitHub Release with tarballs + SHA256 checksums if releasable commits are present.
+1. Runs `npx semantic-release@24` with `@semantic-release/exec` → creates the GitHub Release with tarballs + SHA256 checksums when there are releasable commits.
+2. The cross-compile is the exec plugin's `prepareCmd`, not a separate step: `scripts/build-release.sh ${nextRelease.gitTag}` (`CGO_ENABLED=0`; targets `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`). Running it inside `prepare` is what lets the binaries carry the tag being published, and means nothing is cross-compiled on a push with no releasable commits.
 
 See also `.midnax/ci-cd.md` for org-wide CI/CD context.
 

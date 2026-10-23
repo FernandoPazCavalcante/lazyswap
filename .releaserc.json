@@ -4,6 +4,12 @@
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
     [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "./scripts/build-release.sh ${nextRelease.gitTag}"
+      }
+    ],
+    [
       "@semantic-release/github",
       {
         "assets": [

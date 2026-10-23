@@ -22,17 +22,15 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # ponytail: builds run on every master push; semantic-release no-ops when
-      # there are no releasable commits, so the cross-compiles are wasted then.
-      # Gate behind a dry-run if CI minutes ever matter.
-      - name: Build release artifacts
-        run: ./scripts/build-release.sh
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
 
+      # The cross-compile runs inside semantic-release's prepare step (see the
+      # exec plugin in .releaserc.json), for two reasons: the binaries can be
+      # stamped with the tag about to be published, and nothing is built at all
+      # on a master push with no releasable commits.
       - name: semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx --yes semantic-release@24
+        run: npx --yes -p semantic-release@24 -p @semantic-release/exec@7 semantic-release
