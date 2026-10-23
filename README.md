@@ -123,21 +123,56 @@ lazyswap mcp --allow-trading --max-usd 20 --max-usd-total 60 --chain bsc
 ## Installation
 
 ```bash
-go install github.com/FernandoPazCavalcante/lazyswap@latest
+curl -sSL https://get.lazyswap.app | bash
 ```
 
-Needs **Go 1.26+** (and a C toolchain — the SQLite driver is cgo-free, but
-go-ethereum pulls in cgo on some platforms).
+Detects your platform, verifies the published SHA-256, and installs to the
+first writable of `/usr/local/bin`, `~/.local/bin`, `~/bin`. Pin a release with
+`LAZYSWAP_VERSION=v1.0.0-beta.1`, or choose the directory with
+`LAZYSWAP_BIN_DIR=~/bin`. To remove it later:
+`curl -sSL https://get.lazyswap.app/uninstall.sh | bash`.
 
-> **Pre-release:** no stable version is tagged yet, so `@latest` tracks the
-> `v0.0.0` development tag. For the newest code, use `@master` or
-> [build from source](#build-from-source).
+If you would rather not pipe a script into a shell, the same tarballs are on
+the [releases page](https://github.com/FernandoPazCavalcante/lazyswap/releases),
+each with a `.sha256` beside it:
 
-Once installed, run `lazyswap` (if `$GOBIN` is on your `PATH`). Data lives in
-`~/.lazyswap/` (`wallets.db`, `lazyswap.log`); override with `LAZYSWAP_DATA_DIR`.
-First launch creates a wallet; your private key is encrypted with AES-256-GCM
-under a PBKDF2-derived key (100k iterations) and never leaves the box in
-plaintext.
+```bash
+VERSION=v1.0.0-beta.1          # or whatever the latest release is
+TARGET=linux-x64               # linux-x64 | linux-arm64 | darwin-x64 | darwin-arm64
+BASE=https://github.com/FernandoPazCavalcante/lazyswap/releases/download
+
+curl -fsSLO "$BASE/$VERSION/lazyswap-$TARGET.tar.gz"
+curl -fsSLO "$BASE/$VERSION/lazyswap-$TARGET.tar.gz.sha256"
+sha256sum -c "lazyswap-$TARGET.tar.gz.sha256"   # shasum -a 256 -c on macOS
+tar -xzf "lazyswap-$TARGET.tar.gz"
+install -m 0755 lazyswap ~/.local/bin/
+```
+
+Linux and macOS, x64 and arm64. There is no Windows build.
+
+### With Go
+
+```bash
+go install github.com/FernandoPazCavalcante/lazyswap@master
+```
+
+Needs **Go 1.26+**. The build is cgo-free, so no C toolchain is required.
+
+> **Pre-release:** no stable version is tagged yet, so `@latest` resolves to the
+> `v0.0.0` development tag. Use `@master` until the stable line ships.
+
+### First run
+
+Run `lazyswap` (if you installed with Go, make sure `$GOBIN` is on your
+`PATH`). **No wallet is created for you:** press `c` in the TUI, write down the
+12-word recovery phrase it shows you, and confirm two of its words — the wallet
+is only saved after that, so you cannot end up funding a wallet whose phrase you
+never saw. Press Esc instead and nothing is written.
+
+Your private key is encrypted with AES-256-GCM under a PBKDF2-derived key
+(100k iterations) and never leaves the box in plaintext. Data lives in
+`~/.lazyswap/` (`wallets.db`, `lazyswap.log`); override with
+`LAZYSWAP_DATA_DIR`.
 
 ## Local wallet vs. an exchange: the honest trade-off
 

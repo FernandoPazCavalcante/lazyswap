@@ -1,0 +1,54 @@
+name: Feature request
+description: Something lazyswap should do and does not.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Worth reading first: **[What lazyswap does not do](https://github.com/FernandoPazCavalcante/lazyswap#what-lazyswap-does-not-do)**
+        in the README lists what is deliberately missing, and the
+        **[where PRs are welcome](https://github.com/FernandoPazCavalcante/lazyswap/blob/master/CONTRIBUTING.md#where-prs-are-welcome--and-where-theyre-not)**
+        section of CONTRIBUTING.md says which changes land fastest and which
+        need an issue before any code.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do that you cannot do today?
+      description: The problem, not the solution — it often has a cheaper answer than the one you had in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface does this touch?
+      multiple: true
+      options:
+        - TUI
+        - CLI
+        - MCP server
+        - Chain or DEX support
+        - Docs
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: contributing
+    attributes:
+      label: Would you want to implement it?
+      description: Entirely fine to say no — this is not a price of admission.
+      options:
+        - "Yes, if the approach is agreed first"
+        - "Maybe, with some pointers"
+        - "No, just requesting it"
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you already tried, or how other tools do it?
