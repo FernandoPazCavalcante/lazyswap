@@ -32,6 +32,8 @@ func Run(args []string) int {
 		return runSet(args[1:])
 	case "mcp":
 		return runMcp(args[1:])
+	case "update":
+		return runUpdate(args[1:])
 	case "help", "-h", "--help":
 		usage(os.Stdout)
 		return 0
@@ -66,6 +68,7 @@ Usage:
   lazyswap wallets export --keystore <path>  write an encrypted keystore V3 JSON file
   lazyswap set password                 print an export line; use: eval "$(lazyswap set password)"
   lazyswap mcp                          serve the MCP server for AI agents (stdio)
+  lazyswap update                       replace this binary with the newest release
   lazyswap help | version
 
 swap flags:
@@ -81,6 +84,10 @@ wallets reveal / export flags:
   --address <address>  wallet to use (default: configured default, or the only wallet)
   --keystore <path>    export: output file; never overwrites an existing one
   --allow-pipe         reveal: print even when stdout is not a terminal
+
+update flags:
+  --check              report what is available, install nothing
+  --version <tag>      install this exact release tag instead of the newest
 
 mcp flags:
   --allow-trading        register the swap_execute tool (default: read-only)

@@ -49,6 +49,7 @@ lazyswap wallets reveal           # print the recovery phrase (asks for the pass
 lazyswap wallets export --keystore ~/backup.json  # encrypted keystore for MetaMask/Rabby/geth
 lazyswap config show              # print current chain / slippage / default wallet
 lazyswap mcp                      # serve the MCP server for AI agents (stdio)
+lazyswap update                   # replace this binary with the newest release
 lazyswap help                     # full command reference
 ```
 
@@ -173,6 +174,30 @@ Your private key is encrypted with AES-256-GCM under a PBKDF2-derived key
 (100k iterations) and never leaves the box in plaintext. Data lives in
 `~/.lazyswap/` (`wallets.db`, `lazyswap.log`); override with
 `LAZYSWAP_DATA_DIR`.
+
+### Updating
+
+```bash
+lazyswap update            # download and install the newest release
+lazyswap update --check    # just report what is available
+```
+
+It downloads the build for your platform, **verifies it against the SHA-256
+published beside it**, and only then replaces the binary — by renaming into
+place, so an interrupted update leaves the previous binary working. Your
+wallets live in `~/.lazyswap/` and are not touched.
+
+Pin or roll back with `lazyswap update --version v1.0.0-beta.2`.
+
+If the binary sits somewhere you cannot write, such as `/usr/local/bin`, the
+command says so and stops rather than escalating by itself — rerun it with
+`sudo`, or reinstall with the script above.
+
+Worth knowing what the checksum does and does not prove: it catches a corrupted
+or tampered download, but it is served from the same place as the binary, so it
+is not a defence against a compromised release account. Releases are not signed
+yet; [SECURITY.md](SECURITY.md) tracks that. `go install` and building from
+source avoid the published binaries entirely.
 
 ## Local wallet vs. an exchange: the honest trade-off
 

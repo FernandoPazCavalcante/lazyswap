@@ -55,6 +55,7 @@ lazyswap wallets                  # list wallet addresses
 lazyswap config show              # print chain/slippage/default-wallet/swap-mode
 lazyswap referral status          # referral code, referred wallets, claimable USD (also: code|apply|claim)
 lazyswap mcp                      # MCP server for AI agents (stdio); read-only unless --allow-trading --max-usd <n>
+lazyswap update                   # self-update to the newest release (--check, --version <tag>)
 lazyswap help                     # full command reference
 ```
 
@@ -70,6 +71,7 @@ Layers: **TUI → Services → DAO / Blockchain**
 main.go
   ├── internal/cli        — non-interactive commands (swap, wallets, config, set password, mcp, referral)
   ├── internal/mcp        — MCP stdio server for AI agents (delegates to the same services; never prints)
+  ├── internal/selfupdate — resolve + install a published release over the running binary (`lazyswap update`)
   ├── internal/safety     — pre-swap token risk check (GoPlus; fail-closed, cached; CLI+TUI+MCP)
   ├── internal/api        — lazyswap backend client: SIWE auth (JWT in memory only) + OpenOcean swap route
   │                         + Monitor client (bearer API key, price-monitor watchlist, no wallet link)
@@ -105,6 +107,7 @@ main.go
 | `internal/wallet/` | Wallet CRUD + SQLite DAO. `pick.go` — `Pick()` resolves which wallet to use (explicit addr > default > only wallet) |
 | `internal/crypto/` | AES-256-GCM + PBKDF2 encryption |
 | `internal/pass/` | LazySwapPass ERC-721 (deployed on `bsc_testnet` only) |
+| `internal/selfupdate/` | `lazyswap update`. Resolves the newest release (stable, else newest prerelease — same rule as the installer), verifies the published SHA-256, extracts only a regular file named `lazyswap`, and renames it over the running binary. **Download origin is compiled in — never add an env override**, and https-only including redirects. See the Supply chain section of `SECURITY.md` |
 | `internal/paths/` | Filesystem path resolution |
 | `internal/applog/` | File-based logger |
 | `internal/swap/` | Split: `flow.go` (Flow struct + ConvertUsdToTokenAmount), `flow_quote.go` (Flow.Quote), `flow_execute.go` (Flow.Execute), `flow_thorchain.go` (GetThorchainQuote/EstimateThorchain), `rawtx.go` (RawTx + ExecuteRawTx), `resolve.go` (ResolveToken/AvailableSymbols), `executor.go`. No fee logic — see `docs/FEES.md`. |
