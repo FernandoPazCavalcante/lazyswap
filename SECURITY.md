@@ -141,14 +141,29 @@ Not a vulnerability, but undisclosed is as bad as untrue:
 
 ### Supply chain
 
-- Releases are **not yet signed** and there is no build provenance. Verify the
-  per-asset `.sha256` files for now. Signed, reproducible releases with
-  attestations are planned.
+- Releases are **not yet signed** and there is no build provenance. Every
+  release asset ships a `.sha256` beside it, and both the installer and
+  `lazyswap update` verify it before anything is installed. Be precise about
+  what that buys: it catches a truncated or corrupted download and a tampered
+  object store, because the checksum is fetched separately. It is **not**
+  protection against a compromised release account, since the checksum comes
+  from the same origin as the tarball. Signed, reproducible releases with
+  attestations and a pinned key are planned, and that is the fix.
 - The `master` branch has no required review today, and the release workflow
   publishes on push. Treat `@master` as development code.
-- The `curl | bash` installer at `get.lazyswap.app` is **not** documented in
-  this README on purpose: it does no signature verification. Prefer
-  `go install` or building from source.
+- **`lazyswap update`** replaces the running binary with a published release.
+  Because that is a download-and-execute path inside a program holding private
+  keys, the rules are narrow: the download origin is compiled in with no
+  environment override, every redirect must stay on https, a release with no
+  published checksum is refused rather than installed, only a regular file
+  named exactly `lazyswap` is read out of the archive, and the new binary is
+  moved into place with `rename(2)` so an interrupted update leaves the old one
+  intact. It needs write permission on the directory holding the binary and
+  will not escalate on its own. Implementation: `internal/selfupdate`.
+- The `curl | bash` installer at `get.lazyswap.app` verifies the same published
+  checksum, and is the first install path in the README. What it lacks is a
+  signature, so it inherits the limitation above. `go install` and building
+  from source avoid the published binaries altogether.
 
 ## What was removed for safety
 
