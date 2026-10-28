@@ -45,6 +45,10 @@ const (
 	stepPassword step = iota
 	stepShow
 	stepQuiz
+	// stepDone is held from the moment the quiz is passed until the parent
+	// finishes persisting the wallet. It is a real, visible state: saving
+	// derives a key with PBKDF2, so the overlay renders here for a while.
+	stepDone
 )
 
 // Model is the overlay state.
@@ -133,6 +137,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case revealedMsg:
 		return m.onRevealed(msg), nil
 	case tea.KeyMsg:
+		if m.step == stepDone {
+			// The parent is already saving. Esc must not discard a wallet
+			// that is being created, and enter must not re-run the quiz.
+			return m, nil
+		}
 		if msg.Type == tea.KeyEsc {
 			return m, closeCmd
 		}
@@ -200,13 +209,14 @@ func (m Model) checkQuizWord() (Model, tea.Cmd) {
 	if m.asked < len(m.picks) {
 		return m, nil
 	}
+	m.step = stepDone
 	phrase := m.phrase
 	return m, func() tea.Msg { return ConfirmedMsg{Phrase: phrase} }
 }
 
 // Step reports the current step name (for tests).
 func (m Model) Step() string {
-	return [...]string{"password", "show", "quiz"}[m.step]
+	return [...]string{"password", "show", "quiz", "done"}[m.step]
 }
 
 // Err returns the inline error, if any (for tests).
@@ -249,9 +259,16 @@ func (m Model) body() []string {
 			"",
 			theme.Text().Render(m.grid()),
 		}
-	default:
+	case stepQuiz:
+		if m.asked >= len(m.picks) {
+			break // every pick answered — fall through to the stepDone body
+		}
 		prompt := fmt.Sprintf("Type word #%d to confirm you wrote the phrase down.", m.picks[m.asked]+1)
 		return []string{theme.Dim().Render(prompt), "", m.input.View()}
+	}
+	return []string{
+		theme.Text().Render("Phrase confirmed."),
+		theme.Dim().Render("Creating the wallet…"),
 	}
 }
 
@@ -269,6 +286,8 @@ func (m Model) grid() string {
 
 func (m Model) hint() string {
 	switch {
+	case m.step == stepDone:
+		return "creating the wallet…"
 	case m.step == stepPassword:
 		return "enter: show  ·  esc: cancel"
 	case m.step == stepShow && m.backup:
