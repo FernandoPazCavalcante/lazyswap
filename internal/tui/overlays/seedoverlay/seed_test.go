@@ -93,3 +93,48 @@ func TestRandomPicksDistinctAndInRange(t *testing.T) {
 		}
 	}
 }
+
+// TestViewNeverPanics walks every reachable step and renders it. This asserts
+// no layout — only that rendering a legal state does not crash. bubbletea calls
+// View after every Update, including the frame between the quiz passing and the
+// parent persisting the wallet, which is where an out-of-range pick index once
+// took down the whole program.
+func TestViewNeverPanics(t *testing.T) {
+	reveal := NewReveal("0xabc", func(string) (string, error) { return phrase, nil })
+	reveal.SetSize(80, 24)
+
+	backup := NewBackup(phrase, [2]int{2, 9})
+	backup.SetSize(80, 24)
+	shown, _ := backup.Update(enter)
+	firstWord, _ := typeLine(shown, "able")
+	confirmed, _ := typeLine(firstWord, "abuse")
+
+	for _, m := range []Model{reveal, shown, firstWord, confirmed} {
+		if m.View() == "" {
+			t.Fatalf("step %q rendered nothing", m.Step())
+		}
+	}
+	if confirmed.Step() != "done" {
+		t.Fatalf("after the quiz: step = %q, want done", confirmed.Step())
+	}
+}
+
+func TestKeysAreInertWhileTheWalletIsBeingCreated(t *testing.T) {
+	m := NewBackup(phrase, [2]int{2, 9})
+	m, _ = m.Update(enter)
+	m, _ = typeLine(m, "able")
+	m, _ = typeLine(m, "abuse")
+
+	// Esc here would discard a wallet the parent is already writing.
+	if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc}); cmd != nil {
+		t.Fatalf("esc after confirming produced %#v, want nothing", cmd())
+	}
+	// A second enter must not re-run the quiz or re-emit ConfirmedMsg.
+	next, cmd := m.Update(enter)
+	if cmd != nil {
+		t.Fatalf("enter after confirming produced %#v, want nothing", cmd())
+	}
+	if next.Step() != "done" {
+		t.Fatalf("step = %q, want done", next.Step())
+	}
+}
