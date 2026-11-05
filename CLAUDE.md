@@ -26,7 +26,7 @@ go test -run TestQuote ./...      # filter by name
 go test -cover ./...              # with coverage
 
 # Release build (cross-compile → dist/)
-bash scripts/build-release.sh           # CGO_ENABLED=0; targets: linux-x64/arm64, darwin-x64/arm64
+bash scripts/build-release.sh           # CGO_ENABLED=0; targets: linux-x64/arm64, darwin-x64/arm64; version from git describe
 bash scripts/build-release.sh v1.2.3    # stamp a version (CI passes the tag; default: git describe)
 
 # Quality gates (see REVIEW.md for thresholds; CI enforces on every PR)
@@ -46,17 +46,15 @@ go install github.com/FernandoPazCavalcante/lazyswap@latest
 
 **CLI usage examples:**
 ```bash
-lazyswap                          # launch TUI (no args)
-lazyswap swap 0.50 BNB USDT       # swap BNB → USDT
-lazyswap swap 5 BNB USDT --yes    # skip confirmation
-lazyswap swap 5 BNB USDT --api    # route via API (OpenOcean best rate; needs a Pass)
-lazyswap config set-swap-mode api # make the API route the default
-lazyswap wallets                  # list wallet addresses
-lazyswap config show              # print chain/slippage/default-wallet/swap-mode
-lazyswap referral status          # referral code, referred wallets, claimable USD (also: code|apply|claim)
-lazyswap mcp                      # MCP server for AI agents (stdio); read-only unless --allow-trading --max-usd <n>
-lazyswap update                   # self-update to the newest release (--check, --version <tag>)
-lazyswap help                     # full command reference
+lazyswap                                        # launch TUI (no args)
+lazyswap swap 0.50 BNB USDT                     # swap BNB → USDT
+lazyswap swap 5 BNB USDT --yes                  # skip confirmation
+lazyswap wallets                                # list wallet addresses
+lazyswap wallets reveal                         # print recovery phrase (asks for password)
+lazyswap wallets export --keystore key.json     # write encrypted keystore V3 JSON
+lazyswap config show                            # print chain/slippage/default-wallet
+lazyswap mcp                                    # MCP server for AI agents (stdio); read-only unless --allow-trading --max-usd <n>
+lazyswap help                                   # full command reference
 ```
 
 ---
@@ -69,12 +67,11 @@ Layers: **TUI → Services → DAO / Blockchain**
 
 ```
 main.go
-  ├── internal/cli        — non-interactive commands (swap, wallets, config, set password, mcp, referral)
+  ├── internal/cli        — non-interactive commands (swap, wallets, config, set password, mcp)
   ├── internal/mcp        — MCP stdio server for AI agents (delegates to the same services; never prints)
-  ├── internal/selfupdate — resolve + install a published release over the running binary (`lazyswap update`)
   ├── internal/safety     — pre-swap token risk check (GoPlus; fail-closed, cached; CLI+TUI+MCP)
-  ├── internal/api        — lazyswap backend client: SIWE auth (JWT in memory only) + OpenOcean swap route
-  │                         + Monitor client (bearer API key, price-monitor watchlist, no wallet link)
+  ├── internal/api        — Monitor client only: bearer API key, price-monitor watchlist, no wallet link
+  │                         (SIWE auth + OpenOcean swap-routing client removed in v0.1.0)
   └── internal/tui        — Bubble Tea screens / panels / overlays / theme / keys
         ├── internal/wallet     — wallet CRUD + SQLite DAO (modernc/sqlite, cgo-free)
         ├── internal/swap       — quote + execute orchestration (EVM + BTC)
@@ -82,13 +79,14 @@ main.go
         ├── internal/thorchain  — cross-chain BTC swap routing
         ├── internal/balance    — balance fetch + formatting
         ├── internal/explorer   — block explorer API
-        ├── internal/pass       — LazySwapPass ERC-721 mint/validity (on-chain only)
-        ├── internal/settings   — persisted chain/slippage/default-wallet/swap-mode (shared CLI+TUI)
+        ├── internal/settings   — persisted chain/slippage/default-wallet (shared CLI+TUI)
         ├── internal/crypto     — AES-256-GCM + PBKDF2 (100k iters) key encryption
         ├── internal/chain      — CHAINS map + contract ABIs (SSOT for all chain config)
         ├── internal/paths      — filesystem SSOT (~/.lazyswap/, LAZYSWAP_DATA_DIR)
         └── internal/applog     — file logger (~/.lazyswap/lazyswap.log, never stdout)
 ```
+
+> **Removed packages:** `internal/pass` (LazySwapPass service), `internal/tui/panels/lazyswappass`, `internal/tui/panels/referral`, `internal/swap/rawtx.go` (RawTx/ExecuteRawTx), and the SIWE/swap-routing parts of `internal/api` were deleted. The `referral` and `set-swap-mode` CLI subcommands were also removed.
 
 ---
 
@@ -101,31 +99,32 @@ main.go
 | `internal/tui/` | Bubble Tea model, screens, panels, overlays, theme, keybindings |
 | `internal/tui/screens/mainscreen/` | Main screen — split into `main.go`, `layout.go`, `messages.go`, `update.go`, `update_keys.go`, `update_panels.go`, `update_swap.go`, `update_wallet.go`, `update_alerts.go` |
 | `internal/cli/` | Non-interactive CLI commands |
-| `internal/mcp/` | MCP stdio server — read-only tools by default; `swap_execute`/`buy_pass` only with `--allow-trading` + `--max-usd` cap, password via `LAZYSWAP_PASSWORD` env only |
+| `internal/cli/wallets.go` | `wallets` / `wallets reveal` / `wallets export` subcommands |
+| `internal/mcp/` | MCP stdio server — read-only tools by default; `swap_execute` only with `--allow-trading` + `--max-usd` cap + optional `--max-usd-total` cumulative budget; password via `LAZYSWAP_PASSWORD` env only |
 | `internal/safety/` | Pre-swap token risk check (GoPlus). Fail-closed: missing data/API failure → "unknown", never "safe". Testnets are always unknown (GoPlus has no coverage) |
-| `internal/api/` | Backend client for hybrid swap. SIWE JWT lives in memory only; swap tx is signed/broadcast locally (`swap.Flow.ExecuteRawTx`). Also contains `Monitor` — bearer-key client for the price-monitor watchlist (no SIWE, no wallet link; key stored plaintext in `app_config` as `monitor_api_key`). API route needs `chain.Config.OpenOceanKey` (mainnets only); every front-end falls back to direct when the API is unavailable. **Note: backend host not deployed as of v0.1.0.** |
-| `internal/wallet/` | Wallet CRUD + SQLite DAO. `pick.go` — `Pick()` resolves which wallet to use (explicit addr > default > only wallet) |
+| `internal/api/` | **Monitor only** — bearer-key client for the price-monitor watchlist (no SIWE, no wallet link; key stored plaintext in `app_config` as `monitor_api_key`). Base URL: `https://api.lazyswap.app`; override with `LAZYSWAP_API_URL`. The SIWE auth + OpenOcean swap-routing client was removed in v0.1.0. |
+| `internal/wallet/` | Wallet CRUD + SQLite DAO. `pick.go` — `Pick()` resolves which wallet to use (explicit addr > default > only wallet). `export.go` — `GenerateMnemonic`, `Reveal`, `ExportKeystore`, `ErrNoMnemonic`, `ErrWalletNotFound` |
 | `internal/crypto/` | AES-256-GCM + PBKDF2 encryption |
-| `internal/pass/` | LazySwapPass ERC-721 (deployed on `bsc_testnet` only) |
-| `internal/selfupdate/` | `lazyswap update`. Resolves the newest release (stable, else newest prerelease — same rule as the installer), verifies the published SHA-256, extracts only a regular file named `lazyswap`, and renames it over the running binary. **Download origin is compiled in — never add an env override**, and https-only including redirects. See the Supply chain section of `SECURITY.md` |
 | `internal/paths/` | Filesystem path resolution |
 | `internal/applog/` | File-based logger |
-| `internal/swap/` | Split: `flow.go` (Flow struct + ConvertUsdToTokenAmount), `flow_quote.go` (Flow.Quote), `flow_execute.go` (Flow.Execute), `flow_thorchain.go` (GetThorchainQuote/EstimateThorchain), `rawtx.go` (RawTx + ExecuteRawTx), `resolve.go` (ResolveToken/AvailableSymbols), `executor.go`. No fee logic — see `docs/FEES.md`. |
-| `internal/tui/panels/alerts/` | Alerts tab (tab 3) — token price-monitor watchlist; keys: `j`/`k` navigate, `x` remove, `t` Telegram link, `R` register. Tokens added from Tokens tab with `a` |
-| `internal/tui/panels/referral/` | Referral tab (tab 2) — display-only; shows referral code, earnings, claimable USD |
+| `internal/swap/` | Split: `flow.go` (Flow struct + ConvertUsdToTokenAmount), `flow_quote.go` (Flow.Quote), `flow_execute.go` (Flow.Execute), `flow_thorchain.go` (GetThorchainQuote/EstimateThorchain), `minoutput.go` (minOutputFor — decimal-aware min-output with zero-protection), `resolve.go` (ResolveToken/AvailableSymbols), `executor.go`. No fee logic — see `docs/FEES.md`. `rawtx.go` and `ExecuteRawTx` were deleted. |
+| `internal/settings/` | Persisted chain/slippage/default-wallet. `SwapMode` field and `set-swap-mode` command **removed**. |
+| `internal/tui/overlays/seedoverlay/` | Backup quiz + reveal overlay. Two flows: **Backup** (shown after phrase generation — user must type back two random words before wallet is saved; Esc discards phrase, nothing is persisted); **Reveal** (re-prompts password, then shows phrase). Emits `ConfirmedMsg` (parent saves) or `CloseMsg`. |
+| `internal/tui/panels/alerts/` | Alerts tab (tab 2) — token price-monitor watchlist; keys: `j`/`k` navigate, `x` remove, `t` Telegram link, `R` register. Tokens added from Tokens tab with `a` |
 | `internal/tui/overlays/swapoverlay/` | Split: `swap.go` (Model/Update), `items.go` (Item + list builders), `view.go` (View) |
 | `internal/tui/panels/swapbtc/` | Split: `panel.go` (Model/state), `messages.go` (all message types), `update.go` (Update/handleKey), `view.go` (View) |
 | `e2e/` | End-to-end tests (build tag `e2e`): CLI quote, TUI smoke, funded swap |
 | `internal/testrpc/` | Fake EVM JSON-RPC server for unit tests (getAmountsOut/balanceOf/allowance + tx lifecycle). Configure `RateNum`/`RateDen` for pricing, `Allowance`, `NativeBalance`, `TokenBalance`, `NoLiquidity`, `RevertTx`. Excluded from coverage denominator |
 | `internal/cli/testdata/` | Golden files for CLI output; regenerate with `go test ./internal/cli/ -update` flag |
-| `scripts/build-release.sh` | Cross-compile release tarballs → `dist/` |
+| `scripts/build-release.sh` | Cross-compile release tarballs → `dist/`; stamps version via `-X .../internal/cli.version=<ver>` ldflags; accepts optional version arg (default: `git describe --tags --always --dirty`) |
 | `scripts/coverage-gate.sh` | Coverage gate script: ≥ 70% ex-TUI and ex-testrpc |
 | `Makefile` | Local dev targets: `build`, `setup`, `lint`, `test`, `cover`, `e2e`, `mutate`, `gate` |
 | `REVIEW.md` | PR review checklist and gate thresholds |
 | `ARCHITECTURE.md` | Package map, the two contribution seams (add a DEX / add a chain), testrpc pattern |
 | `CONTRIBUTING.md` | Review cadence, AI policy, open-core boundary, DCO sign-off requirement |
+| `SECURITY.md` | Known weaknesses (key-at-rest, memory, backup/recovery, MCP, supply chain). Vulnerability reporting: GitHub private advisory, 7-day initial response, 90-day coordinated disclosure, no bounty. |
 | `docs/FEES.md` | **Fee policy SSOT.** lazyswap takes no fee; DEX pool fees and THORchain fees documented here |
-| `.releaserc.json` | semantic-release config |
+| `.releaserc.json` | semantic-release config (uses `@semantic-release/exec` to run `build-release.sh` in `prepare`) |
 | `.golangci.yml` | golangci-lint config (standard linters + cyclop ≤15, funlen ≤80, revive file-length ≤500) |
 | `.gremlins.yaml` | Mutation-testing config (excludes `_test.go`, `internal/tui/`, `e2e/`, `main.go`) |
 | `.midnax/` | Machine-generated org-wide context (do not edit by hand) |
@@ -138,29 +137,42 @@ main.go
 - **`internal/chain/config.go` `CHAINS` is the single source of truth.** Never hardcode chain-specific values (RPC URLs, router addresses, token addresses) anywhere else.
 - Supported chains: `ethereum`, `bsc`, `bsc_testnet`, `sepolia`. Default: `bsc`.
 - `OrderedKeys` controls stable display order (Go maps iterate randomly).
-- `chain.Config.OpenOceanKey` is non-empty only on mainnets (`eth`, `bsc`); empty = API swap mode unavailable on that chain.
 - `LAZYSWAP_RPC_URL` env overrides every chain's RPC endpoint at runtime (used by tests and CI).
 
 ### Fees
 - **lazyswap takes no fee.** The full input amount reaches the router. `docs/FEES.md` is the single source of truth — if anything else disagrees, `docs/FEES.md` is right and the other place is a bug.
-- `internal/swap/fee.go` and `CalcFee`/`SwapFeePercent`/`FeeBreakdown` **no longer exist** (deleted). `FlowQuote` has no `FeePercent`, `FeeAmount`, or `NetFromTokenAmount` fields.
-- The old 0.15% `SwapFeePercent` deduction was removed. A regression test in `internal/swap/flow_rpc_test.go` asserts a 1:1 pool returns the full input untaxed; `internal/cli/swap_run_test.go` asserts no quote surface mentions a fee.
+- `internal/swap/fee.go` and `CalcFee`/`SwapFeePercent`/`FeeBreakdown` **no longer exist** (deleted). `FlowQuote` has no `FeePercent`, `FeeAmount`, `NetFromTokenAmount`, `Mode`, or `PriceImpact` fields.
 - Users pay: network gas (to validators), DEX pool fee (0.30% Uniswap V2 / 0.25% PancakeSwap V2, charged by the router, already in the quoted output), and THORchain network + outbound fees (shown in BTC quote). THORchain affiliate fee is 0 bps (`AffiliateBPS` in `internal/thorchain/config.go`).
 
-### Swap routing (hybrid)
-- Two routes: **direct** (on-chain V2 router, no auth) and **api** (lazyswap backend → OpenOcean, MEV-protected, needs a LazySwapPass). **The backend is not deployed as of v0.1.0** — the API route exists in code but cannot function.
-- The active route is persisted in `settings.SwapMode` (`""` / `"direct"` / `"api"`). The TUI swap overlay's `t` key toggles it; `lazyswap config set-swap-mode` sets it from CLI.
-- `mainscreen.Model` tracks `swapMode` (persisted preference) and `lastQuoteMode` (route that produced the confirmed quote) — execution always follows `lastQuoteMode`.
-- `FlowQuote.Mode` (`"direct"` or `"api"`) and `FlowQuote.PriceImpact` (API only) are JSON-tagged — they are part of the MCP/API surface; do not rename without updating MCP tool schemas.
-- `swap.Flow.ExecuteRawTx` signs and broadcasts a backend-built `RawTx` locally; it refuses a tx whose `ChainID` doesn't match the connected chain.
-- `swap.ResolveToken(chain.Config, symbol)` maps a symbol to `TokenInfo` (case-insensitive; native sentinel for the chain's native asset). `AvailableSymbols` lists swappable symbols for error messages.
+### Swap routing (direct only)
+- **Only one route remains: direct** (on-chain V2 router, no auth). The API route (SIWE + OpenOcean) was removed in v0.1.0 — the client code, `--api`/`--direct` flags, `set-swap-mode` command, `settings.SwapMode` field, `ModeToggleMsg`, `swapMode`/`lastQuoteMode`/`apiClient` fields, and `RawTx`/`ExecuteRawTx` are all gone.
+
+### Min-output calculation
+- `internal/swap/minoutput.go` `minOutputFor(estimatedOutput, slippage, decimals)` computes the minimum acceptable output, formatted to the output token's own decimal precision (capped at 8 places to avoid float64 noise). It **refuses** (returns an error) rather than produce a zero or near-zero `amountOutMin` — a swap with no slippage protection. Both `Flow.Quote` and `Flow.Execute` use it.
+
+### Wallet creation — backup-first flow
+- **A wallet is not saved until the user confirms the backup quiz.** `c` → confirm → `y` generates a phrase (via `wallet.GenerateMnemonic`) and opens the `seedoverlay` in Backup mode. The user must type back two randomly chosen words. Only on `ConfirmedMsg` does `saveConfirmedCmd` call `svc.Import(phrase)` and persist the wallet. Pressing Esc discards the phrase; nothing is written.
+- `b` key in the TUI opens the Reveal overlay for the selected wallet (re-prompts password, then shows the phrase).
+- `wallet.GenerateMnemonic()` — generates a fresh 12-word BIP-39 phrase without persisting anything.
+- `wallet.Service.Reveal(address)` — returns the stored plaintext phrase; errors with `ErrNoMnemonic` if the row has no phrase, `ErrWalletNotFound` if the address is unknown.
+- `wallet.Service.ExportKeystore(address, passphrase, outPath)` — writes keystore V3 JSON (go-ethereum standard scrypt, `0600`, `O_EXCL`). Passphrase must be ≥ 8 chars (`MinKeystorePassphrase`). Never overwrites.
+
+### Wallets CLI (subcommands)
+- `lazyswap wallets reveal [--address X] [--allow-pipe]` — prints the 12-word BIP-39 recovery phrase. Refuses to print to a non-TTY stdout unless `--allow-pipe` is given (a phrase in a pipe tends to end up in logs or shell history).
+- `lazyswap wallets export --keystore <path> [--address X]` — writes an encrypted keystore V3 JSON file. Never overwrites an existing file. Passphrase from `LAZYSWAP_KEYSTORE_PASSPHRASE` env or interactive prompt.
+
+### MCP server (cumulative budget)
+- `--allow-trading` registers only `swap_execute` (not `buy_pass` — removed). Requires `--max-usd > 0`.
+- `--max-usd-total <usd>` sets a **cumulative** USD budget for the server's lifetime. A per-swap cap alone is a rate limit; an agent acting on an injected instruction can call `swap_execute` in a loop. The cumulative budget bounds total loss. Must be ≥ `--max-usd` if set.
+- Budget is consumed conservatively: a failed swap still counts against the total (an agent cannot retry past the ceiling by provoking failures).
+- MCP tool annotations: read-only tools carry `ReadOnlyHint: true`; `swap_execute` carries `DestructiveHint: true`. MCP hosts use these to decide auto-permissions.
 
 ### Price-monitor / Alerts tab
 - `internal/api.Monitor` authenticates with a **bearer API key** (no SIWE, no wallet). Registration is anonymous (`POST /api/v1/auth/register`); the returned key is stored plaintext in `app_config` under `monitor_api_key` / `monitor_user_id` — it can only manage the watchlist, not funds.
-- The Alerts panel (tab 3) is data-pushed: the parent (`mainscreen`) runs all API calls off the UI thread and pushes results back via typed messages (`monitorRegisteredMsg`, `monitorListMsg`, etc.).
+- The Alerts panel (tab **2**) is data-pushed: the parent (`mainscreen`) runs all API calls off the UI thread and pushes results back via typed messages (`monitorRegisteredMsg`, `monitorListMsg`, etc.).
 - Default alert threshold: **±5%** (`defaultThresholdPct`). Edit via backend API (`PATCH /watchlist/:id`) until the panel grows an in-TUI editor.
 - From the Tokens tab, press **`a`** to add the selected token to the watchlist.
-- Tab numbering: `tabTokens=1`, `tabReferral=2`, `tabAlerts=3`, `tabSettings=4`, `tabSwapBTC=5`, `tabPass=6`.
+- Tab numbering: `tabTokens=1`, `tabAlerts=2`, `tabSettings=3`, `tabSwapBTC=4`. (`tabReferral` and `tabPass` were removed.)
 
 ### Logging / stdout
 - **Outside `internal/cli`, never write to stdout/stderr** (`fmt.Print*`, `log`, `println`) — it corrupts the Bubble Tea TUI and the MCP JSON-RPC stream.
@@ -174,21 +186,24 @@ main.go
 ### Security
 - Private keys are handled exclusively in `internal/wallet` + `internal/crypto`. Never log or print a private key in plaintext.
 - `lazyswap set password` emits `export LAZYSWAP_PASSWORD=…` only when stdout is not a TTY (captured), to avoid terminal leakage.
+- `lazyswap wallets reveal` refuses to print to a non-TTY unless `--allow-pipe` is passed.
 - MCP trading mode reads the password from `LAZYSWAP_PASSWORD` env only — never from a tool parameter.
 - Monitor API key is stored plaintext (it controls only the watchlist — no funds, no wallet link).
+- Known weaknesses (PBKDF2 cost, GCM nonce size, `FetchAll` decrypts all wallets, no password-change path, etc.) are documented in `SECURITY.md`.
 
 ### Testing
 - Test behavior and data only. **Do not test `View()` / layout / ASCII art** — they churn. TUI e2e smoke (teatest) asserts stable substrings only.
-- Useful env vars in tests: `LAZYSWAP_PASSWORD` (skips prompt), `LAZYSWAP_DATA_DIR`, `LAZYSWAP_TEST=1`, `LAZYSWAP_RPC_URL` (overrides every chain's RPC — point it at `internal/testrpc`), `LAZYSWAP_API_URL` (overrides backend URL), `LAZYSWAP_THORNODE_URL` (overrides the THORnode API).
+- Useful env vars in tests: `LAZYSWAP_PASSWORD` (skips prompt), `LAZYSWAP_DATA_DIR`, `LAZYSWAP_TEST=1`, `LAZYSWAP_RPC_URL` (overrides every chain's RPC — point it at `internal/testrpc`), `LAZYSWAP_API_URL` (overrides backend URL), `LAZYSWAP_THORNODE_URL` (overrides the THORnode API), `LAZYSWAP_KEYSTORE_PASSPHRASE` (skips keystore export prompt).
 - `internal/testrpc` is the fake EVM JSON-RPC for unit tests (getAmountsOut/balanceOf/allowance + tx lifecycle). Configure `RateNum`/`RateDen` for pricing, `Allowance`, `NativeBalance`, `TokenBalance`, `NoLiquidity`, `RevertTx`. It is excluded from the coverage denominator.
 - CLI goldens live in `internal/cli/testdata/*.golden`; regenerate with `go test ./internal/cli/ -update` and review the diff like code.
 - E2E env: `LAZYSWAP_E2E_MNEMONIC` (funded bsc_testnet wallet — nightly only).
+- `internal/wallet/export_test.go` — lowers keystore scrypt cost to `LightScryptN/P` via `init()` to keep tests fast; the format is identical.
 
 ### TS parity
 - Most packages mirror a TypeScript file in `lazyswap-old/` (noted as `// Mirrors src/...`). When changing behavior, keep parity with the Bun reference unless intentionally diverging.
 
 ### Release
-- Version injected via `-ldflags "-X .../internal/cli.version=..."` by `scripts/build-release.sh`, which takes the version as `$1`. semantic-release passes `${nextRelease.gitTag}` through the exec plugin's `prepareCmd`; a local build with no argument falls back to `git describe --tags --always --dirty`. Default inside the source: `"dev"` (what `go build` and `go run` produce).
+- Version injected via `-ldflags "-X .../internal/cli.version=<ver>"` by `scripts/build-release.sh`, which takes the version as `$1` (default: `git describe --tags --always --dirty`). semantic-release passes `${nextRelease.gitTag}` through the exec plugin's `prepareCmd`; a local build with no argument falls back to `git describe`.
 - **Conventional Commits** required — semantic-release derives versions from commit history.
 - `master` → `beta` prereleases; `stable` → full releases.
 - **Never commit:** compiled binary (`lazyswap`), `dist/`, `*.db`, `*.log`, `.claude/`.
@@ -215,8 +230,8 @@ Three GitHub Actions workflows:
 2. `funded-e2e` — real tiny swap on `bsc_testnet`; runs only when `LAZYSWAP_E2E_MNEMONIC` secret is set.
 
 **`.github/workflows/release.yml`** — runs on push to `master`:
-1. Runs `npx semantic-release@24` with `@semantic-release/exec` → creates the GitHub Release with tarballs + SHA256 checksums when there are releasable commits.
-2. The cross-compile is the exec plugin's `prepareCmd`, not a separate step: `scripts/build-release.sh ${nextRelease.gitTag}` (`CGO_ENABLED=0`; targets `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`). Running it inside `prepare` is what lets the binaries carry the tag being published, and means nothing is cross-compiled on a push with no releasable commits.
+1. Runs `npx -p semantic-release@24 -p @semantic-release/exec@7 semantic-release`.
+2. The cross-compile is the exec plugin's `prepareCmd` (see `.releaserc.json`): `scripts/build-release.sh ${nextRelease.gitTag}` (`CGO_ENABLED=0`; targets `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`). Running it inside `prepare` stamps the binaries with the tag being published and skips the build entirely on pushes with no releasable commits.
 
 See also `.midnax/ci-cd.md` for org-wide CI/CD context.
 
@@ -226,11 +241,11 @@ See also `.midnax/ci-cd.md` for org-wide CI/CD context.
 
 - Data directory: `~/.lazyswap/` (`wallets.db`, `lazyswap.log`). Override: `LAZYSWAP_DATA_DIR`.
 - Connects at runtime to public EVM RPC endpoints (configured in `CHAINS`) and THORchain API.
-- Backend API base URL: `https://api.lazyswap.org`; override with `LAZYSWAP_API_URL`.
+- Backend API base URL: `https://api.lazyswap.app`; override with `LAZYSWAP_API_URL`.
 - No server, no backend container — pure local binary.
 
 ---
 
-## LazySwapPass (ERC-721)
+## LazySwapPass & Referral (removed)
 
-`internal/pass` implements on-chain mint + validity/expiry reads for the LazySwapPass NFT. Surfaced as TUI tab 6 ("Lazyswap Pass"). Currently deployed on `bsc_testnet` only (`chain.Config.PassAddress`). Empty `PassAddress` = feature is inert on that chain. Required for the API swap route (which is itself not deployed as of v0.1.0).
+The `internal/pass` package, `internal/tui/panels/lazyswappass`, and `internal/tui/panels/referral` were **deleted**. The TUI Pass tab and referral tab no longer exist. `chain.Config.PassAddress` remains in the chain config as a field but is not consumed by any active service. The `referral` CLI subcommand was also removed.
