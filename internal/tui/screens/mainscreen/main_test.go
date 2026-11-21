@@ -29,6 +29,7 @@ func TestSwapBTCReviewReceivesConfirmKey(t *testing.T) {
 	var cmd tea.Cmd
 	for _, key := range []tea.KeyMsg{
 		enter, {Type: tea.KeyRunes, Runes: []rune("25")}, enter,
+		{Type: tea.KeyRunes, Runes: []rune{'a'}},
 		{Type: tea.KeyRunes, Runes: []rune(destination)}, enter,
 	} {
 		m, cmd = m.Update(key)
@@ -37,8 +38,8 @@ func TestSwapBTCReviewReceivesConfirmKey(t *testing.T) {
 		t.Fatal("missing quote request")
 	}
 	request, ok := cmd().(swapbtcpanel.QuoteRequestMsg)
-	if !ok {
-		t.Fatal("expected a request for BTC quotes")
+	if !ok || request.BTCAddress != destination {
+		t.Fatalf("expected BTC quotes for %q, got %+v", destination, request)
 	}
 	m, _ = m.Update(swapbtcpanel.QuoteResultMsg{ID: request.ID, Route: swapbtcpanel.RouteQuote{
 		Provider: swapbtcpanel.THORChain,

@@ -15,11 +15,6 @@ import (
 // handled=false for any other message.
 func (m Model) handleSwapBTCMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 	switch msg := msg.(type) {
-	case swapbtcpanel.EstimateRequestMsg:
-		if m.current == nil {
-			return m, nil, true
-		}
-		return m, thorEstimateCmd(m.flowSvc, msg), true
 	case swapbtcpanel.QuoteRequestMsg:
 		if m.current == nil {
 			return m, nil, true
@@ -38,7 +33,7 @@ func (m Model) handleSwapBTCMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		applog.Tracef("mainscreen — executing BTC swap %s → BTC $%s for %s",
 			msg.Quote.FromToken.Symbol, msg.Quote.USDAmount, m.current.Address)
 		return m, thorExecuteCmd(m.flowSvc, m.current.PrivateKey, msg), true
-	case swapbtcpanel.QuoteResultMsg, swapbtcpanel.ExecutionResultMsg, swapbtcpanel.TickMsg, swapbtcpanel.EstimateResultMsg:
+	case swapbtcpanel.QuoteResultMsg, swapbtcpanel.ExecutionResultMsg, swapbtcpanel.TickMsg:
 		next, cmd := m.onSwapBTCResult(msg)
 		return next, cmd, true
 	}

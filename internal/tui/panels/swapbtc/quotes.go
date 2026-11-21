@@ -64,6 +64,9 @@ func (m Model) onQuote(msg QuoteResultMsg, at time.Time) (Model, tea.Cmd) {
 	if route.Err == nil && route.Quote.EstimatedOutputSats <= 0 {
 		route.Err = errors.New("provider returned no BTC amount")
 	}
+	if route.Err == nil && route.Quote.BTCAddress != m.destination {
+		route.Err = errors.New("provider returned a quote for a different destination")
+	}
 	if route.Err == nil && route.Quote.ExpiresAt.IsZero() {
 		route.Quote.ExpiresAt = at.Add(refreshSeconds * time.Second)
 	}
@@ -105,6 +108,8 @@ func quoteTick(id uint64) tea.Cmd {
 
 func (m Model) handleQuoteKey(key string, at time.Time) (Model, tea.Cmd) {
 	switch key {
+	case "a":
+		return m.editAddress()
 	case "r":
 		for _, route := range m.quotes {
 			if route.pending() {
@@ -120,6 +125,9 @@ func (m Model) handleQuoteKey(key string, at time.Time) (Model, tea.Cmd) {
 		m.expanded = !m.expanded
 	case "enter":
 		if m.selectedQuote().valid(at) {
+			if m.destination == "" {
+				return m.editAddress()
+			}
 			m.state = stateReview
 		}
 	}
@@ -142,7 +150,10 @@ func (m Model) handleReviewKey(key string, at time.Time) (Model, tea.Cmd) {
 	if key == "r" {
 		return m.beginQuotes()
 	}
-	if key == "n" || !route.valid(at) {
+	if key == "a" {
+		return m.editAddress()
+	}
+	if key == "n" || !route.valid(at) || m.destination == "" || route.Quote.BTCAddress != m.destination {
 		m.state = stateQuotes
 		return m, nil
 	}

@@ -27,6 +27,7 @@ type state int
 const (
 	stateForm state = iota
 	stateQuotes
+	stateAddress
 	stateReview
 	stateExecuting
 	stateDone
@@ -37,7 +38,6 @@ type field int
 const (
 	fieldToken field = iota
 	fieldAmount
-	fieldAddr
 )
 
 // Item wraps an owned token balance for the source list.
@@ -72,22 +72,17 @@ type Model struct {
 	state state
 	field field
 
-	from       swap.TokenInfo
-	network    string
-	requestID  uint64
-	estimateID uint64
-	providers  []Provider
-	quotes     []RouteQuote
-	selected   Provider
-	expanded   bool
-	ticking    bool
-	quoteErr   string
-	execRes    *swap.FlowResult
-
-	// Price preview shown under the amount field (destination-less estimate).
-	estimate    *swap.FlowQuote
-	estimateErr string
-	estimating  bool
+	from        swap.TokenInfo
+	network     string
+	destination string
+	requestID   uint64
+	providers   []Provider
+	quotes      []RouteQuote
+	selected    Provider
+	expanded    bool
+	ticking     bool
+	quoteErr    string
+	execRes     *swap.FlowResult
 
 	focused       bool
 	width, height int
@@ -127,10 +122,8 @@ func (m *Model) SetSize(w, h int) {
 	if listW < 10 {
 		listW = 10
 	}
-	// Reserve rows for the chrome the form always draws around the list:
-	// border (2) + title + 2 blanks + help + amount label/input + estimate
-	// line + addr label/input + an optional error line. Keeps it within height.
-	listH := h - 14
+	// Leave room for the border, title, amount, hint, and validation feedback.
+	listH := h - 11
 	if listH < 3 {
 		listH = 3
 	}
@@ -150,7 +143,9 @@ func (m *Model) Reset() {
 	m.SetBalances(nil)
 }
 
-func (m Model) ShowingQuotes() bool { return m.state == stateQuotes || m.state == stateReview }
+func (m Model) ShowingQuotes() bool {
+	return m.state == stateQuotes || m.state == stateAddress || m.state == stateReview
+}
 
 func (m Model) IsExecuting(requestID uint64) bool {
 	return m.state == stateExecuting && m.requestID == requestID
@@ -174,7 +169,7 @@ func (m *Model) SetBalances(balances []balance.TokenBalance) {
 // Capturing reports whether a text field is currently focused (so digits and
 // letters are typed rather than treated as global shortcuts).
 func (m Model) Capturing() bool {
-	return m.state == stateForm && (m.field == fieldAmount || m.field == fieldAddr)
+	return m.state == stateAddress || (m.state == stateForm && m.field == fieldAmount)
 }
 
 // ─── list helpers ──────────────────────────────────────────────────────────────

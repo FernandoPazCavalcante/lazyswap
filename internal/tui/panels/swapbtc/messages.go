@@ -10,7 +10,8 @@ type Provider string
 
 const THORChain Provider = "THORChain"
 
-// QuoteRequestMsg asks the parent for the available BTC routes.
+// QuoteRequestMsg asks the parent for BTC estimates when BTCAddress is empty,
+// or quotes tied to that destination when it is set.
 type QuoteRequestMsg struct {
 	ID         uint64
 	From       swap.TokenInfo
@@ -23,21 +24,6 @@ type ExecuteRequestMsg struct {
 	ID       uint64
 	Provider Provider
 	Quote    swap.FlowQuote
-}
-
-// EstimateRequestMsg asks the parent for a destination-less price preview
-// (panel → parent), fired when the user confirms a USD amount.
-type EstimateRequestMsg struct {
-	ID        uint64
-	From      swap.TokenInfo
-	USDAmount string
-}
-
-// EstimateResultMsg carries a price-preview estimate back (parent → panel).
-type EstimateResultMsg struct {
-	ID    uint64
-	Quote swap.FlowQuote
-	Err   error
 }
 
 // RouteQuote holds the result for a provider. A zero quote with no error is pending.

@@ -1,6 +1,7 @@
 package swapbtc
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -12,22 +13,6 @@ import (
 // Update advances the form, quote comparison, and review.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
-
-	case EstimateResultMsg:
-		if msg.ID != m.estimateID || m.state != stateForm || m.field != fieldAddr {
-			return m, nil
-		}
-		m.estimating = false
-		if msg.Err != nil {
-			m.estimate = nil
-			m.estimateErr = msg.Err.Error()
-			return m, nil
-		}
-		q := msg.Quote
-		m.estimate = &q
-		m.estimateErr = ""
-		return m, nil
-
 	case QuoteResultMsg:
 		return m.onQuote(msg, time.Now())
 
@@ -60,6 +45,8 @@ func (m Model) handleKey(k tea.KeyMsg) (Model, tea.Cmd) {
 
 	case stateQuotes:
 		return m.handleQuoteKey(k.String(), time.Now())
+	case stateAddress:
+		return m.handleAddressKey(k)
 	case stateReview:
 		return m.handleReviewKey(strings.ToLower(k.String()), time.Now())
 
@@ -79,11 +66,15 @@ func (m Model) handleEsc() (Model, tea.Cmd) {
 	case stateForm:
 		if m.field != fieldToken {
 			m.amount.Blur()
-			m.addr.Blur()
 			m.field = fieldToken
+			m.quoteErr = ""
 		}
 	case stateQuotes:
 		return m.editQuote()
+	case stateAddress:
+		m.addr.Blur()
+		m.quoteErr = ""
+		m.state = stateQuotes
 	case stateReview:
 		m.state = stateQuotes
 	case stateDone:
@@ -109,41 +100,55 @@ func (m Model) handleFormKey(k tea.KeyMsg) (Model, tea.Cmd) {
 
 	case fieldAmount:
 		if k.Type == tea.KeyEnter {
-			m.amount.Blur()
-			m.field = fieldAddr
-			m.addr.Focus()
-			// Fire a destination-less estimate so the BTC/sats preview shows
-			// before the user types an address.
-			return m, tea.Batch(textinput.Blink, m.requestEstimate())
-		}
-		// A keystroke changes the amount — drop the now-stale estimate.
-		m.estimate = nil
-		m.estimateErr = ""
-		var cmd tea.Cmd
-		m.amount, cmd = m.amount.Update(k)
-		return m, cmd
-
-	case fieldAddr:
-		if k.Type == tea.KeyEnter {
-			if !m.inputsValid() {
-				m.quoteErr = "Enter a positive USD amount and a valid BTC address."
+			amount, err := strconv.ParseFloat(strings.TrimSpace(m.amount.Value()), 64)
+			if err != nil || !(amount > 0 && amount <= math.MaxFloat64) {
+				m.quoteErr = "Enter a positive USD amount."
 				return m, nil
 			}
-			m.addr.Blur()
+			m.amount.Blur()
 			return m.beginQuotes()
 		}
+		m.quoteErr = ""
 		var cmd tea.Cmd
-		m.addr, cmd = m.addr.Update(k)
+		m.amount, cmd = m.amount.Update(k)
 		return m, cmd
 	}
 	return m, nil
 }
 
+func (m Model) editAddress() (Model, tea.Cmd) {
+	m.state = stateAddress
+	m.addr.SetValue(m.destination)
+	cmd := m.addr.Focus()
+	return m, cmd
+}
+
+func (m Model) handleAddressKey(k tea.KeyMsg) (Model, tea.Cmd) {
+	m.quoteErr = ""
+	if k.Type != tea.KeyEnter {
+		var cmd tea.Cmd
+		m.addr, cmd = m.addr.Update(k)
+		return m, cmd
+	}
+	address := strings.TrimSpace(m.addr.Value())
+	if address != "" && len(address) < minBTCAddrLen {
+		m.quoteErr = "Enter a valid BTC address."
+		return m, nil
+	}
+	m.addr.Blur()
+	if address == m.destination {
+		m.state = stateQuotes
+		return m, nil
+	}
+	m.destination = address
+	return m.beginQuotes()
+}
+
 // ─── intent helpers ────────────────────────────────────────────────────────────
 
 func (m Model) beginQuotes() (Model, tea.Cmd) {
-	it, ok := m.tokens.SelectedItem().(Item)
-	if !m.ShowingQuotes() {
+	if m.state == stateForm {
+		it, ok := m.tokens.SelectedItem().(Item)
 		if !ok {
 			return m, nil
 		}
@@ -158,58 +163,29 @@ func (m Model) beginQuotes() (Model, tea.Cmd) {
 		m.quotes = append(m.quotes, RouteQuote{Provider: provider})
 	}
 	request := QuoteRequestMsg{ID: m.requestID, From: m.from,
-		USDAmount: strings.TrimSpace(m.amount.Value()), BTCAddress: strings.TrimSpace(m.addr.Value())}
+		USDAmount: strings.TrimSpace(m.amount.Value()), BTCAddress: m.destination}
 	return m, func() tea.Msg { return request }
-}
-
-func (m *Model) requestEstimate() tea.Cmd {
-	it, ok := m.tokens.SelectedItem().(Item)
-	if !ok {
-		return nil
-	}
-	usd := strings.TrimSpace(m.amount.Value())
-	if v, err := strconv.ParseFloat(usd, 64); err != nil || v <= 0 {
-		return nil
-	}
-	m.from = it.toTokenInfo()
-	from := m.from
-	m.estimateID++
-	id := m.estimateID
-	m.estimating = true
-	m.estimateErr = ""
-	return func() tea.Msg {
-		return EstimateRequestMsg{ID: id, From: from, USDAmount: usd}
-	}
-}
-
-func (m Model) inputsValid() bool {
-	usd, err := strconv.ParseFloat(strings.TrimSpace(m.amount.Value()), 64)
-	if err != nil || usd <= 0 {
-		return false
-	}
-	return len(strings.TrimSpace(m.addr.Value())) >= minBTCAddrLen
 }
 
 func (m *Model) reset() {
 	m.state = stateForm
 	m.field = fieldToken
 	m.requestID++
-	m.estimateID++
+	m.destination = ""
 	m.quotes = nil
 	m.selected = ""
 	m.expanded = false
 	m.ticking = false
 	m.quoteErr = ""
 	m.execRes = nil
-	m.estimate = nil
-	m.estimateErr = ""
-	m.estimating = false
 	m.amount.Blur()
 	m.addr.Blur()
 }
 
 func (m Model) editQuote() (Model, tea.Cmd) {
+	destination := m.destination
 	m.reset()
+	m.destination = destination
 	m.field = fieldAmount
 	m.amount.Focus()
 	return m, textinput.Blink

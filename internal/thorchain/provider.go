@@ -163,8 +163,9 @@ func (data quoteResponse) swapQuote(btcAddress string) (SwapQuote, error) {
 
 	// Memo is only needed to execute (requires a destination). For an
 	// estimate-only quote (no btcAddress) we leave it empty.
-	memo := data.Memo
+	var memo string
 	if btcAddress != "" {
+		memo = data.Memo
 		if memo == "" {
 			memo = fmt.Sprintf("=:%s:%s:%d", BTCAsset, btcAddress, minSats)
 		} else {

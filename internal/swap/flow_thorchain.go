@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 	"strings"
@@ -20,18 +21,17 @@ import (
 var btcToken = TokenInfo{Symbol: "BTC", Address: "bitcoin", Decimals: 8}
 
 // GetThorchainQuote converts USD to the input token and quotes it against THORNode.
+// An empty BTC address requests an estimate without a swap memo.
 func (f *Flow) GetThorchainQuote(
 	ctx context.Context,
 	fromToken TokenInfo,
 	usdAmount, btcAddress string,
 ) (FlowQuote, error) {
 	usd, err := strconv.ParseFloat(usdAmount, 64)
-	if err != nil || usd <= 0 {
+	if err != nil || !(usd > 0 && usd <= math.MaxFloat64) {
 		return FlowQuote{}, errors.New("USD amount must be a positive number")
 	}
-	if strings.TrimSpace(btcAddress) == "" {
-		return FlowQuote{}, errors.New("bitcoin address is required")
-	}
+	btcAddress = strings.TrimSpace(btcAddress)
 
 	conv, err := f.ConvertUsdToTokenAmount(ctx, fromToken, usd)
 	if err != nil {
@@ -77,79 +77,6 @@ func (f *Flow) GetThorchainQuote(
 		ThorFees:             quote.TotalFees,
 		BTCAddress:           btcAddress,
 		ThorMemo:             quote.Memo,
-		EstimatedOutputSats:  quote.ExpectedSats,
-		ThorMinTokenAmount:   minTok,
-		ThorMinUSD:           minUSD,
-	}, nil
-}
-
-// EstimateThorchain returns a destination-less price preview for fromToken →
-// BTC: USD → token (DEX) + LazySwap fee, then a THORchain quote with no memo.
-// Used to show "≈ X BTC (Y sats)" as soon as the user enters a USD amount,
-// before they type a Bitcoin address.
-func (f *Flow) EstimateThorchain(
-	ctx context.Context,
-	fromToken TokenInfo,
-	usdAmount string,
-) (FlowQuote, error) {
-	usd, err := strconv.ParseFloat(usdAmount, 64)
-	if err != nil || usd <= 0 {
-		return FlowQuote{}, errors.New("USD amount must be a positive number")
-	}
-
-	conv, err := f.ConvertUsdToTokenAmount(ctx, fromToken, usd)
-	if err != nil {
-		return FlowQuote{}, err
-	}
-	fromTokenAmount := conv.TokenAmount
-
-	fromAsset, err := f.thorAssetString(fromToken)
-	if err != nil {
-		return FlowQuote{}, err
-	}
-	thorAmount, err := thorchain.ToThorBaseUnits(fromTokenAmount)
-	if err != nil {
-		return FlowQuote{}, err
-	}
-
-	quote, err := thorchain.NewProvider().GetSwapQuote(ctx, fromAsset, thorAmount, "")
-	if err != nil {
-		// Below the minimum is a displayable state, not a hard error: return a
-		// quote flagged ThorBelowMin so the panel can show the disclaimer + block.
-		var bm *thorchain.BelowMinError
-		if errors.As(err, &bm) {
-			minTok, minUSD := thorMin(bm.MinIn, conv.PricePerToken)
-			return FlowQuote{
-				FromToken:          fromToken,
-				ToToken:            btcToken,
-				USDAmount:          usdAmount,
-				USDAmountFormatted: FormatUSD(usd),
-				FromTokenAmount:    conv.TokenAmount,
-				FromTokenPriceLine: fmt.Sprintf("@ %s/%s", FormatUSD(conv.PricePerToken), fromToken.Symbol),
-				NeedsApproval:      fromToken.Address != NativeSentinel,
-				IsThorchain:        true,
-				ThorBelowMin:       true,
-				ThorMinTokenAmount: minTok,
-				ThorMinUSD:         minUSD,
-			}, nil
-		}
-		return FlowQuote{}, err
-	}
-
-	minTok, minUSD := thorMinFields(quote.RecommendedMinIn, conv.PricePerToken)
-	return FlowQuote{
-		FromToken:            fromToken,
-		ToToken:              btcToken,
-		USDAmount:            usdAmount,
-		USDAmountFormatted:   FormatUSD(usd),
-		FromTokenAmount:      conv.TokenAmount,
-		FromTokenPriceLine:   fmt.Sprintf("@ %s/%s", FormatUSD(conv.PricePerToken), fromToken.Symbol),
-		EstimatedOutput:      quote.ExpectedOutput,
-		MinOutput:            quote.MinOutput,
-		NeedsApproval:        fromToken.Address != NativeSentinel,
-		IsThorchain:          true,
-		ThorEstimatedSeconds: quote.EstimatedSeconds,
-		ThorFees:             quote.TotalFees,
 		EstimatedOutputSats:  quote.ExpectedSats,
 		ThorMinTokenAmount:   minTok,
 		ThorMinUSD:           minUSD,

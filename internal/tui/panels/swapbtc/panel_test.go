@@ -25,49 +25,28 @@ func seeded(providers ...Provider) Model {
 func keyRunes(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
 func keyEnter() tea.KeyMsg         { return tea.KeyMsg{Type: tea.KeyEnter} }
 
-func TestFormFlowEmitsQuoteRequest(t *testing.T) {
+func TestFormRequestsQuotesBeforeEnteringAnAddress(t *testing.T) {
 	m := seeded()
-
-	// token → amount
 	m, _ = m.Update(keyEnter())
-	if m.field != fieldAmount {
-		t.Fatalf("after enter on token, field = %v, want fieldAmount", m.field)
+	if m.field != fieldAmount || !m.Capturing() {
+		t.Fatal("expected to be editing the USD amount")
 	}
-	if !m.Capturing() {
-		t.Fatal("should capture input while editing amount")
-	}
-
-	// type amount, advance to addr
 	m, _ = m.Update(keyRunes("50"))
-	m, _ = m.Update(keyEnter())
-	if m.field != fieldAddr {
-		t.Fatalf("after enter on amount, field = %v, want fieldAddr", m.field)
-	}
-
-	// type a valid BTC address, submit
-	m, _ = m.Update(keyRunes(validBTC))
 	m, cmd := m.Update(keyEnter())
-	if m.state != stateQuotes {
-		t.Fatalf("after submit, state = %v, want stateQuotes", m.state)
-	}
-	if cmd == nil {
-		t.Fatal("expected a QuoteRequestMsg command")
+	if m.state != stateQuotes || m.Capturing() || cmd == nil {
+		t.Fatal("confirming the amount should request quotes immediately")
 	}
 	msg, ok := cmd().(QuoteRequestMsg)
-	if !ok {
-		t.Fatalf("expected QuoteRequestMsg, got %T", cmd())
-	}
-	if msg.From.Symbol != "BNB" || msg.USDAmount != "50" || msg.BTCAddress != validBTC {
-		t.Fatalf("bad request: %+v", msg)
+	if !ok || msg.From.Symbol != "BNB" || msg.USDAmount != "50" || msg.BTCAddress != "" {
+		t.Fatalf("bad estimate request: %+v", msg)
 	}
 }
 
 func TestSubmitWithInvalidInputsRejected(t *testing.T) {
 	m := seeded()
 	m, _ = m.Update(keyEnter()) // token → amount
-	m, _ = m.Update(keyEnter()) // amount empty → addr
-	m, _ = m.Update(keyRunes("short"))
-	m, cmd := m.Update(keyEnter()) // submit with bad amount + short addr
+	m, _ = m.Update(keyRunes("NaN"))
+	m, cmd := m.Update(keyEnter()) // reject a non-finite amount
 	if cmd != nil {
 		t.Fatal("invalid inputs should not emit a quote request")
 	}
@@ -82,7 +61,7 @@ func TestSubmitWithInvalidInputsRejected(t *testing.T) {
 func requestQuotes(t *testing.T, providers ...Provider) Model {
 	t.Helper()
 	m := seeded(providers...)
-	for _, key := range []tea.KeyMsg{keyEnter(), keyRunes("50"), keyEnter(), keyRunes(validBTC), keyEnter()} {
+	for _, key := range []tea.KeyMsg{keyEnter(), keyRunes("50"), keyEnter()} {
 		m, _ = m.Update(key)
 	}
 	if m.state != stateQuotes {
@@ -91,12 +70,12 @@ func requestQuotes(t *testing.T, providers ...Provider) Model {
 	return m
 }
 
-func quoteFor(provider Provider, sats int64, expiry time.Time) RouteQuote {
+func (m Model) quoteFor(provider Provider, sats int64, expiry time.Time) RouteQuote {
 	return RouteQuote{
 		Provider: provider,
 		Quote: swap.FlowQuote{
 			FromToken: swap.TokenInfo{Symbol: "BNB"}, USDAmount: "50",
-			EstimatedOutputSats: sats, BTCAddress: validBTC, ExpiresAt: expiry,
+			EstimatedOutputSats: sats, BTCAddress: m.destination, ExpiresAt: expiry,
 		},
 	}
 }
@@ -105,9 +84,9 @@ func TestQuotesRankOnlyValidRoutes(t *testing.T) {
 	m := requestQuotes(t, "LI.FI", "NEAR Intents", "MAYAChain")
 	now := time.Now()
 	for _, route := range []RouteQuote{
-		quoteFor(THORChain, 10000, now.Add(time.Minute)),
-		quoteFor("LI.FI", 14000, now.Add(time.Minute)),
-		quoteFor("NEAR Intents", 21000, now.Add(-time.Minute)),
+		m.quoteFor(THORChain, 10000, now.Add(time.Minute)),
+		m.quoteFor("LI.FI", 14000, now.Add(time.Minute)),
+		m.quoteFor("NEAR Intents", 21000, now.Add(-time.Minute)),
 		{Provider: "MAYAChain", Err: errTest{}},
 	} {
 		m, _ = m.onQuote(QuoteResultMsg{ID: m.requestID, Route: route}, now)
@@ -126,8 +105,9 @@ func TestQuotesRankOnlyValidRoutes(t *testing.T) {
 
 func TestReviewConfirmsOnlySelectedRoute(t *testing.T) {
 	m := requestQuotes(t, "LI.FI")
+	m = requestForDestination(t, m)
 	expiry := time.Now().Add(time.Minute)
-	for _, route := range []RouteQuote{quoteFor(THORChain, 10000, expiry), quoteFor("LI.FI", 10500, expiry)} {
+	for _, route := range []RouteQuote{m.quoteFor(THORChain, 10000, expiry), m.quoteFor("LI.FI", 10500, expiry)} {
 		m, _ = m.Update(QuoteResultMsg{ID: m.requestID, Route: route})
 	}
 	m, _ = m.Update(keyRunes("k"))
@@ -138,7 +118,7 @@ func TestReviewConfirmsOnlySelectedRoute(t *testing.T) {
 	if m.state != stateReview || cmd != nil {
 		t.Fatal("enter should review the route without executing")
 	}
-	m, _ = m.Update(QuoteResultMsg{ID: m.requestID, Route: quoteFor("LI.FI", 11000, expiry)})
+	m, _ = m.Update(QuoteResultMsg{ID: m.requestID, Route: m.quoteFor("LI.FI", 11000, expiry)})
 	_, cmd = m.Update(keyRunes("y"))
 	if cmd == nil {
 		t.Fatal("expected the confirmed swap request")
@@ -150,10 +130,10 @@ func TestReviewConfirmsOnlySelectedRoute(t *testing.T) {
 }
 
 func TestExpiredReviewRequiresRefreshAndNewSelection(t *testing.T) {
-	m := requestQuotes(t)
+	m := requestForDestination(t, requestQuotes(t))
 	now := time.Now()
 	expiry := now.Add(time.Minute)
-	route := quoteFor(THORChain, 10000, expiry)
+	route := m.quoteFor(THORChain, 10000, expiry)
 	m, cmd := m.onQuote(QuoteResultMsg{ID: m.requestID, Route: route}, now)
 	if cmd == nil {
 		t.Fatal("received a valid quote without starting the expiry timer")
@@ -175,48 +155,62 @@ func TestExpiredReviewRequiresRefreshAndNewSelection(t *testing.T) {
 	}
 }
 
-func TestAmountConfirmStartsEstimate(t *testing.T) {
-	m := seeded()
-	m, _ = m.Update(keyEnter())     // token → amount
-	m, _ = m.Update(keyRunes("50")) // type amount
-	m, _ = m.Update(keyEnter())     // confirm amount → addr + estimate
-	if m.field != fieldAddr {
-		t.Fatalf("field = %v, want fieldAddr", m.field)
+func requestForDestination(t *testing.T, m Model) Model {
+	t.Helper()
+	m, _ = m.Update(keyRunes("a"))
+	m, _ = m.Update(keyRunes(validBTC))
+	next, cmd := m.Update(keyEnter())
+	if cmd == nil || cmd().(QuoteRequestMsg).BTCAddress != validBTC {
+		t.Fatal("expected a fresh quote for the BTC address")
 	}
-	if !m.estimating {
-		t.Fatal("confirming amount should start an estimate")
+	return next
+}
+
+func TestEstimatePromptsForAddressBeforeReview(t *testing.T) {
+	m := requestQuotes(t)
+	expiry := time.Now().Add(time.Minute)
+	estimate := m.quoteFor(THORChain, 10000, expiry)
+	estimateID := m.requestID
+	m, _ = m.Update(QuoteResultMsg{ID: estimateID, Route: estimate})
+	m, _ = m.Update(keyEnter())
+	if m.state != stateAddress || !m.Capturing() {
+		t.Fatal("reviewing an estimate should prompt for a BTC address")
 	}
-	if m.from.Symbol != "BNB" {
-		t.Fatalf("estimate source = %q, want BNB", m.from.Symbol)
+
+	m, _ = m.Update(keyRunes("short"))
+	m, cmd := m.Update(keyEnter())
+	if cmd != nil || m.state != stateAddress || m.quoteErr == "" {
+		t.Fatal("a short address should leave the user in the address editor")
+	}
+	m.addr.SetValue(validBTC)
+	m, cmd = m.Update(keyEnter())
+	if cmd == nil {
+		t.Fatal("expected new quotes after entering an address")
+	}
+	req, ok := cmd().(QuoteRequestMsg)
+	if !ok || req.ID == estimateID || req.BTCAddress != validBTC || m.selected != THORChain {
+		t.Fatalf("unexpected quote request: %+v", req)
+	}
+
+	m, _ = m.Update(QuoteResultMsg{ID: estimateID, Route: estimate})
+	m, _ = m.Update(keyEnter())
+	if m.state != stateQuotes || !m.selectedQuote().pending() {
+		t.Fatal("a destination-less estimate advanced to review after entering an address")
+	}
+	m, _ = m.Update(QuoteResultMsg{ID: req.ID, Route: m.quoteFor(THORChain, 10500, expiry)})
+	m, _ = m.Update(keyEnter())
+	if m.state != stateReview || m.selectedQuote().Quote.EstimatedOutputSats != 10500 {
+		t.Fatal("expected to review the new, destination-specific values")
 	}
 }
 
-func TestEstimateResultStoresBTCAndSats(t *testing.T) {
-	m := seeded()
-	m.estimating = true
-	m.field = fieldAddr
-	m, _ = m.Update(EstimateResultMsg{Quote: swap.FlowQuote{
-		EstimatedOutput:     "0.00072145",
-		EstimatedOutputSats: 72145,
-	}})
-	if m.estimating {
-		t.Fatal("estimate result should clear the estimating flag")
-	}
-	if m.estimate == nil {
-		t.Fatal("estimate should be set")
-	}
-	if m.estimate.EstimatedOutputSats != 72145 {
-		t.Fatalf("unexpected estimate: %+v", m.estimate)
-	}
-}
-
-func TestTypingAmountClearsStaleEstimate(t *testing.T) {
-	m := seeded()
-	m, _ = m.Update(keyEnter()) // token → amount
-	m.estimate = &swap.FlowQuote{EstimatedOutput: "0.001"}
-	m, _ = m.Update(keyRunes("7")) // a keystroke invalidates the estimate
-	if m.estimate != nil {
-		t.Fatal("typing a new amount should drop the stale estimate")
+func TestClearingAddressRequestsEstimatesAgain(t *testing.T) {
+	m := requestForDestination(t, requestQuotes(t))
+	m, _ = m.Update(keyRunes("a"))
+	m.addr.SetValue("")
+	m, cmd := m.Update(keyEnter())
+	if cmd == nil || cmd().(QuoteRequestMsg).BTCAddress != "" || m.state != stateQuotes {
+		t.Fatal("clearing the address should return to the comparison with fresh estimates")
 	}
 }
 

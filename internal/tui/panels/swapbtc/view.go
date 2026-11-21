@@ -1,7 +1,6 @@
 package swapbtc
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -42,6 +41,8 @@ func (m Model) bodyForState() string {
 		return m.formBody()
 	case stateQuotes:
 		return m.quotesBody(time.Now())
+	case stateAddress:
+		return m.addressBody(time.Now())
 	case stateReview:
 		return m.reviewBody(time.Now())
 	case stateExecuting:
@@ -56,51 +57,26 @@ func (m Model) bodyForState() string {
 
 func (m Model) formBody() string {
 	amountLabel := "  Amount (USD $):"
-	addrLabel := "  Destination BTC address:"
 	if m.field == fieldAmount {
 		amountLabel = theme.Text().Bold(true).Render("> Amount (USD $):")
 	}
-	if m.field == fieldAddr {
-		addrLabel = theme.Text().Bold(true).Render("> Destination BTC address:")
+	rows := []string{m.tokens.View(), "", amountLabel, "  " + m.amount.View()}
+	return m.formWithError(rows)
+}
+
+func (m Model) addressBody(at time.Time) string {
+	rows := []string{theme.Text().Bold(true).Render("> Destination BTC address:"), "  " + m.addr.View()}
+	if route := m.selectedQuote(); route.Provider != "" {
+		rows = append(rows, "", quoteRow(route, false, false, at))
 	}
-	rows := []string{
-		m.tokens.View(),
-		"",
-		amountLabel,
-		"  " + m.amount.View(),
-		m.estimateLine(),
-		addrLabel,
-		"  " + m.addr.View(),
-	}
+	return m.formWithError(rows)
+}
+
+func (m Model) formWithError(rows []string) string {
 	if m.quoteErr != "" {
 		rows = append(rows, "", theme.Error().Render("  "+m.quoteErr))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
-}
-
-// estimateLine renders the live BTC/sats price preview under the amount field,
-// or the THORChain minimum disclaimer when the amount is too low. Always returns
-// one row so the form height stays stable.
-func (m Model) estimateLine() string {
-	switch {
-	case m.estimating:
-		return theme.Dim().Render("  estimating…")
-	case m.estimate != nil && m.estimate.ThorBelowMin:
-		return theme.Error().Render(fmt.Sprintf("  ⚠ Below THORChain minimum — need ≥ %s %s (≈ %s)",
-			m.estimate.ThorMinTokenAmount, m.estimate.FromToken.Symbol, m.estimate.ThorMinUSD))
-	case m.estimateErr != "":
-		return theme.Dim().Render("  (estimate unavailable)")
-	case m.estimate != nil:
-		s := theme.Text().Render(fmt.Sprintf("  THORChain ≈ %s BTC (%s sats)",
-			m.estimate.EstimatedOutput, formatSats(m.estimate.EstimatedOutputSats)))
-		if m.estimate.ThorMinTokenAmount != "" {
-			s += theme.Dim().Render(fmt.Sprintf("   · min %s %s",
-				m.estimate.ThorMinTokenAmount, m.estimate.FromToken.Symbol))
-		}
-		return s
-	default:
-		return ""
-	}
 }
 
 func (m Model) helpForState() string {
@@ -110,15 +86,21 @@ func (m Model) helpForState() string {
 		case fieldToken:
 			return "↑/↓ select token  ·  enter: next  ·  esc: back"
 		default:
-			return "type value  ·  enter: next/quote  ·  esc: back"
+			return "Enter get quotes · Esc back"
 		}
 	case stateQuotes:
-		if m.width >= tableWidth {
-			return "j/k select · Enter review · r refresh · Esc edit"
+		action := "Enter review"
+		if m.destination == "" {
+			action = "Enter add address"
 		}
-		return "j/k · Space details · Enter review · r refresh · Esc"
+		if m.width >= tableWidth {
+			return "j/k · " + action + " · a address · r refresh · Esc edit"
+		}
+		return "j/k · Space details · r refresh\n" + action + " · a address · Esc edit"
+	case stateAddress:
+		return "Enter get quotes · Esc back"
 	case stateReview:
-		return "y confirm swap · r refresh · Esc quotes"
+		return "y confirm swap · a address · r refresh · Esc"
 	case stateExecuting:
 		return "waiting for receipt…"
 	case stateDone:

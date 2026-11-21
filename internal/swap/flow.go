@@ -55,7 +55,6 @@ type FlowQuote struct {
 
 	// THORChain enforces a per-token minimum input (covers the BTC network
 	// outbound fee). These describe it for the current token/price.
-	ThorBelowMin       bool   `json:"thorBelowMin,omitempty"`       // true when the requested amount is under the minimum
 	ThorMinTokenAmount string `json:"thorMinTokenAmount,omitempty"` // minimum input in from-token units, e.g. "4.016789"
 	ThorMinUSD         string `json:"thorMinUSD,omitempty"`         // that minimum as approx USD, e.g. "$4.02"
 }

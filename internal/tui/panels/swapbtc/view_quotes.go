@@ -15,7 +15,11 @@ const tableWidth = 66
 
 func (m Model) quotesBody(at time.Time) string {
 	quotes := m.orderedQuotes(at)
-	lines := []string{fmt.Sprintf("  %s USD · %s (%s) → Bitcoin", m.amount.Value(), m.from.Symbol, m.network), ""}
+	lines := []string{fmt.Sprintf("  %s USD · %s (%s) → Bitcoin", m.amount.Value(), m.from.Symbol, m.network)}
+	if m.destination == "" {
+		lines = append(lines, theme.Dim().Render("  Estimates · BTC address optional"))
+	}
+	lines = append(lines, "")
 	quote := m.selectedQuote()
 	wide := m.width >= tableWidth
 	if wide {

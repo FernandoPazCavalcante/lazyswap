@@ -139,18 +139,6 @@ func thorQuoteCmd(f *swap.Flow, req swapbtcpanel.QuoteRequestMsg) tea.Cmd {
 	}
 }
 
-func thorEstimateCmd(f *swap.Flow, req swapbtcpanel.EstimateRequestMsg) tea.Cmd {
-	return func() tea.Msg {
-		if f == nil {
-			return swapbtcpanel.EstimateResultMsg{ID: req.ID, Err: fmt.Errorf("swap service not configured")}
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		q, err := f.EstimateThorchain(ctx, req.From, req.USDAmount)
-		return swapbtcpanel.EstimateResultMsg{ID: req.ID, Quote: q, Err: err}
-	}
-}
-
 func thorExecuteCmd(f *swap.Flow, privateKey string, req swapbtcpanel.ExecuteRequestMsg) tea.Cmd {
 	return func() tea.Msg {
 		if f == nil {

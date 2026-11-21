@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -111,6 +113,30 @@ func TestSwapQuoteUsesReviewedMemoMinimumAndExpiry(t *testing.T) {
 	}
 	if _, err := data.swapQuote("another-btc-address"); err == nil {
 		t.Fatal("accepted memo for a different destination")
+	}
+}
+
+type quoteTransport func(*http.Request) (*http.Response, error)
+
+func (f quoteTransport) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func TestGetSwapQuoteWithoutAddressReturnsEstimateWithoutMemo(t *testing.T) {
+	p := NewProvider()
+	p.client.Transport = quoteTransport(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Query().Has("destination") {
+			t.Fatal("address-less quote included a destination")
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{
+			"expected_amount_out":"1000000", "fees":{"asset":"BTC.BTC","total":"20000"},
+			"total_swap_seconds":600, "memo":"=:BTC.BTC:unexpected-destination:975000"
+		}`))}, nil
+	})
+	q, err := p.GetSwapQuote(context.Background(), "BSC.BNB", "50000000", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.ExpectedSats != 1000000 || q.TotalFees != "0.00020000" || q.EstimatedSeconds != 600 || q.Memo != "" {
+		t.Fatalf("unexpected estimate: %+v", q)
 	}
 }
 

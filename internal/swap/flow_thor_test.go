@@ -90,17 +90,17 @@ func TestThorSourceGasBudgetUsesSourceCurrency(t *testing.T) {
 	}
 }
 
-func TestEstimateThorchain(t *testing.T) {
+func TestGetThorchainQuoteWithoutAddress(t *testing.T) {
 	rpc := testrpc.New()
 	t.Cleanup(rpc.Close)
 	fakeThornode(t, `{"expected_amount_out":"2000000","fees":{"total":"10000"},"outbound_delay_seconds":300,"recommended_min_amount_in":"1"}`)
 
 	f := fakeFlow(t, rpc)
-	q, err := f.EstimateThorchain(context.Background(), bscToken(t, "BNB"), "5")
+	q, err := f.GetThorchainQuote(context.Background(), bscToken(t, "BNB"), "5", "")
 	if err != nil {
 		t.Fatalf("estimate: %v", err)
 	}
-	if !q.IsThorchain || q.EstimatedOutputSats != 2000000 {
+	if !q.IsThorchain || q.EstimatedOutputSats != 2000000 || q.ThorFees != "0.00010000" || q.SourceGasBudget != "0.0003 BNB" {
 		t.Fatalf("estimate wrong: %+v", q)
 	}
 	if q.ThorMemo != "" || q.BTCAddress != "" {
@@ -116,11 +116,8 @@ func TestThorchainQuoteBelowMinimum(t *testing.T) {
 	fakeThornode(t, `{"code":3,"message":"amount less than min swap amount (recommended_min_amount_in: 400000000): invalid request"}`)
 
 	f := fakeFlow(t, rpc)
-	q, err := f.EstimateThorchain(context.Background(), bscToken(t, "BNB"), "1")
-	if err != nil {
-		t.Fatalf("below-min must be a soft signal, got err: %v", err)
-	}
-	if !q.ThorBelowMin || q.ThorMinTokenAmount == "" || q.ThorMinUSD == "" {
-		t.Fatalf("below-min fields missing: %+v", q)
+	_, err := f.GetThorchainQuote(context.Background(), bscToken(t, "BNB"), "1", "")
+	if err == nil || !strings.Contains(err.Error(), "4.000000 BNB") {
+		t.Fatalf("expected the route minimum in the error, got %v", err)
 	}
 }
