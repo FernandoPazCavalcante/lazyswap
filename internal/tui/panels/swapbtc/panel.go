@@ -1,11 +1,4 @@
-// Package swapbtc implements the right-panel "Swap BTC" tab (tab 5): a
-// cross-chain EVM → BTC swap form routed through THORchain.
-//
-// Mirrors src/tui/panels/swap-tab.ts. The form has three sub-fields — source
-// token (list), USD amount, destination BTC address. Submitting emits a
-// QuoteRequestMsg; the parent runs Flow.GetThorchainQuote and feeds back a
-// QuoteResultMsg. A live 10s countdown re-quotes while the preview is shown.
-// Confirming the preview emits ExecuteRequestMsg.
+// Package swapbtc implements the EVM-to-BTC form, quote comparison and review.
 package swapbtc
 
 import (
@@ -21,7 +14,7 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/theme"
 )
 
-// refreshSeconds is the quote-refresh countdown while the preview is shown.
+// refreshSeconds caps the validity of quotes that omit an expiry.
 const refreshSeconds = 10
 
 // minBTCAddrLen is the shortest plausible Bitcoin address (matches swap-tab.ts).
@@ -33,8 +26,8 @@ type state int
 
 const (
 	stateForm state = iota
-	stateQuoting
-	statePreview
+	stateQuotes
+	stateReview
 	stateExecuting
 	stateDone
 )
@@ -79,11 +72,17 @@ type Model struct {
 	state state
 	field field
 
-	from      swap.TokenInfo
-	quote     *swap.FlowQuote
-	quoteErr  string
-	countdown int
-	execRes   *swap.FlowResult
+	from       swap.TokenInfo
+	network    string
+	requestID  uint64
+	estimateID uint64
+	providers  []Provider
+	quotes     []RouteQuote
+	selected   Provider
+	expanded   bool
+	ticking    bool
+	quoteErr   string
+	execRes    *swap.FlowResult
 
 	// Price preview shown under the amount field (destination-less estimate).
 	estimate    *swap.FlowQuote
@@ -95,7 +94,7 @@ type Model struct {
 }
 
 // New builds an empty panel. SetBalances seeds the source token list.
-func New() Model {
+func New(providers ...Provider) Model {
 	amt := textinput.New()
 	amt.Placeholder = "e.g. 50"
 	amt.Prompt = "$ "
@@ -109,11 +108,12 @@ func New() Model {
 	addr.Width = 44
 
 	return Model{
-		tokens: newList("Swap to BTC — choose source"),
-		amount: amt,
-		addr:   addr,
-		state:  stateForm,
-		field:  fieldToken,
+		providers: providers,
+		tokens:    newList("Swap to BTC — choose source"),
+		amount:    amt,
+		addr:      addr,
+		state:     stateForm,
+		field:     fieldToken,
 	}
 }
 
@@ -141,6 +141,20 @@ func (m *Model) SetSize(w, h int) {
 
 // SetFocused toggles the focused border color.
 func (m *Model) SetFocused(b bool) { m.focused = b }
+
+func (m *Model) SetNetwork(network string) { m.network = network }
+
+// Reset clears the form session when the source wallet or network changes.
+func (m *Model) Reset() {
+	m.reset()
+	m.SetBalances(nil)
+}
+
+func (m Model) ShowingQuotes() bool { return m.state == stateQuotes || m.state == stateReview }
+
+func (m Model) IsExecuting(requestID uint64) bool {
+	return m.state == stateExecuting && m.requestID == requestID
+}
 
 // SetBalances rebuilds the source token list from the wallet's balances.
 func (m *Model) SetBalances(balances []balance.TokenBalance) {

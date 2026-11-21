@@ -127,6 +127,8 @@ func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, da
 	}
 	alertsPanel := alertspanel.New()
 	alertsPanel.SetRegistered(monitorKey != "")
+	btcPanel := swapbtcpanel.New(swapbtcpanel.THORChain)
+	btcPanel.SetNetwork(c.Name)
 	return Model{
 		dao:           dao,
 		svc:           svc,
@@ -138,7 +140,7 @@ func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, da
 		tokens:        tokenspanel.New(),
 		alerts:        alertsPanel,
 		settings:      settingspanel.New(st.Slippage, chainKey, c.Name),
-		swapbtc:       swapbtcpanel.New(),
+		swapbtc:       btcPanel,
 		imp:           importoverlay.New(),
 		focus:         focusLeft,
 		activeTab:     tabTokens,

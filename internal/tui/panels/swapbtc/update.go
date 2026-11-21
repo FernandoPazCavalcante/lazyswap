@@ -1,7 +1,6 @@
 package swapbtc
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -10,11 +9,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Update advances the form / preview state machine.
+// Update advances the form, quote comparison, and review.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case EstimateResultMsg:
+		if msg.ID != m.estimateID || m.state != stateForm || m.field != fieldAddr {
+			return m, nil
+		}
 		m.estimating = false
 		if msg.Err != nil {
 			m.estimate = nil
@@ -27,37 +29,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case QuoteResultMsg:
-		if msg.Err != nil {
-			m.quote = nil
-			m.quoteErr = msg.Err.Error()
-			m.state = stateForm
-			m.field = fieldAddr
-			m.addr.Focus()
-			return m, textinput.Blink
-		}
-		q := msg.Quote
-		m.quote = &q
-		m.quoteErr = ""
-		m.state = statePreview
-		m.countdown = refreshSeconds
-		return m, tick()
+		return m.onQuote(msg, time.Now())
 
 	case ExecutionResultMsg:
+		if !m.IsExecuting(msg.ID) {
+			return m, nil
+		}
 		r := msg.Result
 		m.execRes = &r
 		m.state = stateDone
 		return m, nil
 
 	case TickMsg:
-		if m.state != statePreview {
-			return m, nil
-		}
-		m.countdown--
-		if m.countdown <= 0 {
-			m.state = stateQuoting
-			return m, m.requestQuote()
-		}
-		return m, tick()
+		return m.onQuoteTick(msg)
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -74,20 +58,10 @@ func (m Model) handleKey(k tea.KeyMsg) (Model, tea.Cmd) {
 	case stateForm:
 		return m.handleFormKey(k)
 
-	case statePreview:
-		switch strings.ToLower(k.String()) {
-		case "y", "enter":
-			if m.quoteErr != "" || m.quote == nil {
-				return m, nil
-			}
-			m.state = stateExecuting
-			return m, m.requestExecute()
-		case "n":
-			m.state = stateForm
-			m.field = fieldAddr
-			m.addr.Focus()
-			return m, textinput.Blink
-		}
+	case stateQuotes:
+		return m.handleQuoteKey(k.String(), time.Now())
+	case stateReview:
+		return m.handleReviewKey(strings.ToLower(k.String()), time.Now())
 
 	case stateExecuting:
 		// Block input while the tx is in flight.
@@ -108,7 +82,11 @@ func (m Model) handleEsc() (Model, tea.Cmd) {
 			m.addr.Blur()
 			m.field = fieldToken
 		}
-	case statePreview, stateDone:
+	case stateQuotes:
+		return m.editQuote()
+	case stateReview:
+		m.state = stateQuotes
+	case stateDone:
 		m.reset()
 	}
 	return m, nil
@@ -147,19 +125,12 @@ func (m Model) handleFormKey(k tea.KeyMsg) (Model, tea.Cmd) {
 
 	case fieldAddr:
 		if k.Type == tea.KeyEnter {
-			if m.estimate != nil && m.estimate.ThorBelowMin {
-				m.quoteErr = fmt.Sprintf("Amount below THORChain minimum: need ≥ %s %s (≈ %s).",
-					m.estimate.ThorMinTokenAmount, m.estimate.FromToken.Symbol, m.estimate.ThorMinUSD)
-				return m, nil
-			}
 			if !m.inputsValid() {
 				m.quoteErr = "Enter a positive USD amount and a valid BTC address."
 				return m, nil
 			}
 			m.addr.Blur()
-			m.state = stateQuoting
-			m.quoteErr = ""
-			return m, m.requestQuote()
+			return m.beginQuotes()
 		}
 		var cmd tea.Cmd
 		m.addr, cmd = m.addr.Update(k)
@@ -170,18 +141,25 @@ func (m Model) handleFormKey(k tea.KeyMsg) (Model, tea.Cmd) {
 
 // ─── intent helpers ────────────────────────────────────────────────────────────
 
-func (m *Model) requestQuote() tea.Cmd {
+func (m Model) beginQuotes() (Model, tea.Cmd) {
 	it, ok := m.tokens.SelectedItem().(Item)
-	if !ok {
-		return nil
+	if !m.ShowingQuotes() {
+		if !ok {
+			return m, nil
+		}
+		m.from = it.toTokenInfo()
 	}
-	m.from = it.toTokenInfo()
-	from := m.from
-	usd := strings.TrimSpace(m.amount.Value())
-	btc := strings.TrimSpace(m.addr.Value())
-	return func() tea.Msg {
-		return QuoteRequestMsg{From: from, USDAmount: usd, BTCAddress: btc}
+	m.state = stateQuotes
+	m.quoteErr = ""
+	m.requestID++
+	m.ticking = false
+	m.quotes = make([]RouteQuote, 0, len(m.providers))
+	for _, provider := range m.providers {
+		m.quotes = append(m.quotes, RouteQuote{Provider: provider})
 	}
+	request := QuoteRequestMsg{ID: m.requestID, From: m.from,
+		USDAmount: strings.TrimSpace(m.amount.Value()), BTCAddress: strings.TrimSpace(m.addr.Value())}
+	return m, func() tea.Msg { return request }
 }
 
 func (m *Model) requestEstimate() tea.Cmd {
@@ -195,19 +173,12 @@ func (m *Model) requestEstimate() tea.Cmd {
 	}
 	m.from = it.toTokenInfo()
 	from := m.from
+	m.estimateID++
+	id := m.estimateID
 	m.estimating = true
 	m.estimateErr = ""
 	return func() tea.Msg {
-		return EstimateRequestMsg{From: from, USDAmount: usd}
-	}
-}
-
-func (m *Model) requestExecute() tea.Cmd {
-	usd := strings.TrimSpace(m.amount.Value())
-	btc := strings.TrimSpace(m.addr.Value())
-	from := m.from
-	return func() tea.Msg {
-		return ExecuteRequestMsg{From: from, USDAmount: usd, BTCAddress: btc}
+		return EstimateRequestMsg{ID: id, From: from, USDAmount: usd}
 	}
 }
 
@@ -222,10 +193,14 @@ func (m Model) inputsValid() bool {
 func (m *Model) reset() {
 	m.state = stateForm
 	m.field = fieldToken
-	m.quote = nil
+	m.requestID++
+	m.estimateID++
+	m.quotes = nil
+	m.selected = ""
+	m.expanded = false
+	m.ticking = false
 	m.quoteErr = ""
 	m.execRes = nil
-	m.countdown = 0
 	m.estimate = nil
 	m.estimateErr = ""
 	m.estimating = false
@@ -233,6 +208,9 @@ func (m *Model) reset() {
 	m.addr.Blur()
 }
 
-func tick() tea.Cmd {
-	return tea.Tick(time.Second, func(time.Time) tea.Msg { return TickMsg{} })
+func (m Model) editQuote() (Model, tea.Cmd) {
+	m.reset()
+	m.field = fieldAmount
+	m.amount.Focus()
+	return m, textinput.Blink
 }

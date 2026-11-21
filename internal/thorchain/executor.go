@@ -81,7 +81,7 @@ func NewExecutor(client *ethclient.Client, privateKeyHex, chainKey string) (*Exe
 
 // SwapNativeToBtc sends a native-token (ETH / BNB) → BTC swap: a plain value
 // transfer to the vault with the swap memo carried as UTF-8 bytes in tx.data.
-func (e *Executor) SwapNativeToBtc(ctx context.Context, vaultAddress, nativeAmount, memo string) (Result, error) {
+func (e *Executor) SwapNativeToBtc(ctx context.Context, vaultAddress, nativeAmount, memo string, expiresAt time.Time) (Result, error) {
 	if err := validate(vaultAddress, nativeAmount, memo); err != nil {
 		return Result{}, err
 	}
@@ -116,7 +116,9 @@ func (e *Executor) SwapNativeToBtc(ctx context.Context, vaultAddress, nativeAmou
 	if err != nil {
 		return Result{}, fmt.Errorf("sign tx: %w", err)
 	}
-	if err := e.client.SendTransaction(ctx, signed); err != nil {
+	sendCtx, cancel := context.WithDeadline(ctx, expiresAt)
+	defer cancel()
+	if err := e.client.SendTransaction(sendCtx, signed); err != nil {
 		return Result{}, fmt.Errorf("send tx: %w", err)
 	}
 	receipt, err := bind.WaitMined(ctx, e.client, signed)
@@ -141,6 +143,7 @@ func (e *Executor) SwapErc20ToBtc(
 	routerAddress, vaultAddress, tokenAddress, tokenSymbol string,
 	tokenDecimals uint8,
 	tokenAmount, memo string,
+	expiresAt time.Time,
 ) (Result, error) {
 	if err := validate(vaultAddress, tokenAmount, memo); err != nil {
 		return Result{}, err
@@ -157,8 +160,10 @@ func (e *Executor) SwapErc20ToBtc(
 	}
 
 	// Step 1: approve the router to spend the token.
+	sendCtx, cancel := context.WithDeadline(ctx, expiresAt)
+	defer cancel()
 	tokenContract := bind.NewBoundContract(common.HexToAddress(tokenAddress), chain.ERC20ABI, e.client, e.client, e.client)
-	approveAuth, err := e.txOpts(ctx)
+	approveAuth, err := e.txOpts(sendCtx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -166,17 +171,21 @@ func (e *Executor) SwapErc20ToBtc(
 	if err != nil {
 		return Result{}, fmt.Errorf("approve: %w", err)
 	}
-	if _, err := bind.WaitMined(ctx, e.client, approveTx); err != nil {
+	approval, err := bind.WaitMined(ctx, e.client, approveTx)
+	if err != nil {
 		return Result{}, fmt.Errorf("approve wait: %w", err)
+	}
+	if approval.Status != types.ReceiptStatusSuccessful {
+		return Result{}, errors.New("THORChain token approval reverted")
 	}
 
 	// Step 2: depositWithExpiry on the router.
 	router := bind.NewBoundContract(common.HexToAddress(routerAddress), routerABI, e.client, e.client, e.client)
-	depositAuth, err := e.txOpts(ctx)
+	depositAuth, err := e.txOpts(sendCtx)
 	if err != nil {
 		return Result{}, err
 	}
-	expiry := big.NewInt(time.Now().Unix() + 15*60)
+	expiry := big.NewInt(expiresAt.Unix())
 	depositTx, err := router.Transact(depositAuth, "depositWithExpiry",
 		common.HexToAddress(vaultAddress),
 		common.HexToAddress(tokenAddress),
@@ -190,6 +199,9 @@ func (e *Executor) SwapErc20ToBtc(
 	receipt, err := bind.WaitMined(ctx, e.client, depositTx)
 	if err != nil {
 		return Result{}, fmt.Errorf("depositWithExpiry wait: %w", err)
+	}
+	if receipt.Status != types.ReceiptStatusSuccessful {
+		return Result{}, errors.New("THORChain deposit reverted")
 	}
 
 	return Result{
@@ -218,7 +230,7 @@ func (e *Executor) txOpts(ctx context.Context) (*bind.TransactOpts, error) {
 func (e *Executor) estimateGas(ctx context.Context, msg ethereum.CallMsg) uint64 {
 	est, err := e.client.EstimateGas(ctx, msg)
 	if err != nil || est == 0 {
-		return 300000
+		return defaultEVMGasLimit
 	}
 	return est * 12 / 10
 }

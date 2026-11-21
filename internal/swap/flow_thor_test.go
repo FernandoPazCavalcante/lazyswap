@@ -5,8 +5,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
+
+	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/testrpc"
 )
 
@@ -45,6 +52,41 @@ func TestGetThorchainQuote(t *testing.T) {
 	}
 	if q.ThorMemo == "" || q.BTCAddress == "" {
 		t.Fatalf("execution quote must carry memo + destination: %+v", q)
+	}
+	if q.SourceGasBudget != "0.0003 BNB" {
+		t.Fatalf("source gas budget = %q, want 0.0003 BNB", q.SourceGasBudget)
+	}
+}
+
+func TestExecuteThorchainRejectsAnExpiredReviewedQuote(t *testing.T) {
+	flow := &Flow{}
+	result := flow.ExecuteThorchain(context.Background(), "", FlowQuote{
+		IsThorchain: true, BTCAddress: "bc1qexampleaddressxxxxxxxxxxxxxx",
+		ThorMemo:  "=:BTC.BTC:bc1qexampleaddressxxxxxxxxxxxxxx:1000",
+		ExpiresAt: time.Now().Add(-time.Second),
+	})
+	if result.Success || !strings.Contains(result.Err, "quote expired") {
+		t.Fatalf("expected expiry before any RPC or use of the key: %+v", result)
+	}
+}
+
+type gasPriceRPC struct{}
+
+func (gasPriceRPC) GasPrice() hexutil.Uint64 { return 1_000_000_000 }
+
+func TestThorSourceGasBudgetUsesSourceCurrency(t *testing.T) {
+	server := rpc.NewServer()
+	t.Cleanup(server.Stop)
+	if err := server.RegisterName("eth", gasPriceRPC{}); err != nil {
+		t.Fatal(err)
+	}
+	client := ethclient.NewClient(rpc.DialInProc(server))
+	t.Cleanup(client.Close)
+	for key, want := range map[string]string{"bsc": "0.0003 BNB", "ethereum": "0.0003 ETH"} {
+		flow := Flow{client: client, chain: chain.Get(key)}
+		if got := flow.thorSourceGasBudget(context.Background(), 300000); got != want {
+			t.Errorf("gas budget on %s = %q, want %q", key, got, want)
+		}
 	}
 }
 

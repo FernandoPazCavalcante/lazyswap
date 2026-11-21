@@ -6,6 +6,7 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/chain"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 	settingspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/settings"
 	swapbtcpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/swapbtc"
 )
@@ -18,19 +19,25 @@ func (m Model) handleSwapBTCMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		if m.current == nil {
 			return m, nil, true
 		}
-		return m, thorEstimateCmd(m.flowSvc, msg.From, msg.USDAmount), true
+		return m, thorEstimateCmd(m.flowSvc, msg), true
 	case swapbtcpanel.QuoteRequestMsg:
 		if m.current == nil {
 			return m, nil, true
 		}
-		return m, thorQuoteCmd(m.flowSvc, msg.From, msg.USDAmount, msg.BTCAddress), true
+		return m, thorQuoteCmd(m.flowSvc, msg), true
 	case swapbtcpanel.ExecuteRequestMsg:
-		if m.current == nil {
+		if m.current == nil || !m.swapbtc.IsExecuting(msg.ID) {
+			return m, nil, true
+		}
+		if msg.Provider != swapbtcpanel.THORChain {
+			m.swapbtc, _ = m.swapbtc.Update(swapbtcpanel.ExecutionResultMsg{
+				ID: msg.ID, Result: swap.FlowResult{Err: "swap provider not configured"},
+			})
 			return m, nil, true
 		}
 		applog.Tracef("mainscreen — executing BTC swap %s → BTC $%s for %s",
-			msg.From.Symbol, msg.USDAmount, m.current.Address)
-		return m, thorExecuteCmd(m.flowSvc, m.current.PrivateKey, msg.From, msg.USDAmount, msg.BTCAddress), true
+			msg.Quote.FromToken.Symbol, msg.Quote.USDAmount, m.current.Address)
+		return m, thorExecuteCmd(m.flowSvc, m.current.PrivateKey, msg), true
 	case swapbtcpanel.QuoteResultMsg, swapbtcpanel.ExecutionResultMsg, swapbtcpanel.TickMsg, swapbtcpanel.EstimateResultMsg:
 		next, cmd := m.onSwapBTCResult(msg)
 		return next, cmd, true
@@ -84,6 +91,8 @@ func (m Model) onNetworkChange(msg settingspanel.NetworkChangeMsg) (Model, tea.C
 		c := chain.Get(msg.ChainKey)
 		m.chainKey = msg.ChainKey
 		m.settings.SetNetwork(msg.ChainKey, c.Name)
+		m.swapbtc.Reset()
+		m.swapbtc.SetNetwork(c.Name)
 		m.persistChain(msg.ChainKey)
 		return m, nil
 	}
@@ -106,6 +115,8 @@ func (m Model) onChainSwitched(msg chainSwitchedMsg) (Model, tea.Cmd) {
 	m.flowSvc = msg.flowSvc
 	c := chain.Get(msg.chainKey)
 	m.settings.SetNetwork(msg.chainKey, c.Name)
+	m.swapbtc.Reset()
+	m.swapbtc.SetNetwork(c.Name)
 	m.persistChain(msg.chainKey)
 	m.balanceCache = make(map[string][]balance.TokenBalance)
 	m.errMsg = ""

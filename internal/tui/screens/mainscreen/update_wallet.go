@@ -52,11 +52,11 @@ func (m Model) onWalletsRefreshed(msg walletsRefreshedMsg) (Model, tea.Cmd) {
 		m.panel.SelectByAddress(m.defaultWallet)
 	}
 	if sel := m.panel.Selected(); sel != nil {
-		m.current = sel
+		m.setCurrentWallet(sel)
 	} else if len(msg.wallets) > 0 {
-		m.current = &msg.wallets[0]
+		m.setCurrentWallet(&msg.wallets[0])
 	} else {
-		m.current = nil
+		m.setCurrentWallet(nil)
 	}
 	return m, m.balancesCmdForCurrent()
 }
@@ -104,11 +104,19 @@ func (m Model) onBalancesFetched(msg balancesFetchedMsg) (Model, tea.Cmd) {
 }
 
 func (m Model) onWalletSelected(msg walletpanel.SelectionChangedMsg) (Model, tea.Cmd) {
-	m.current = msg.Wallet
+	m.setCurrentWallet(msg.Wallet)
 	if msg.Wallet != nil {
 		m.persistDefaultWallet(msg.Wallet.Address)
 	}
 	return m, m.balancesCmdForCurrent()
+}
+
+func (m *Model) setCurrentWallet(wallet *walletpkg.Wallet) {
+	if (wallet == nil) != (m.current == nil) ||
+		(wallet != nil && m.current != nil && wallet.Address != m.current.Address) {
+		m.swapbtc.Reset()
+	}
+	m.current = wallet
 }
 
 // openBackupOverlay generates a phrase (not yet saved) and asks the user to

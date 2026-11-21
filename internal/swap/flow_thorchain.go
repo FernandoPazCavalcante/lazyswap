@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/FernandoPazCavalcante/lazyswap/internal/applog"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/thorchain"
 )
 
@@ -16,9 +19,7 @@ import (
 // btcToken is the pseudo-token shown in the ToToken slot of a THORchain quote.
 var btcToken = TokenInfo{Symbol: "BTC", Address: "bitcoin", Decimals: 8}
 
-// GetThorchainQuote converts USD → from-token via the DEX, applies the LazySwap
-// fee, then asks Midgard how much BTC the net amount yields. Mirrors
-// swap-flow.service.ts getThorchainQuote.
+// GetThorchainQuote converts USD to the input token and quotes it against THORNode.
 func (f *Flow) GetThorchainQuote(
 	ctx context.Context,
 	fromToken TokenInfo,
@@ -69,6 +70,9 @@ func (f *Flow) GetThorchainQuote(
 		Slippage:             0, // THORchain enforces slippage via the memo min-output
 		NeedsApproval:        fromToken.Address != NativeSentinel,
 		IsThorchain:          true,
+		ExpiresAt:            quote.ExpiresAt,
+		SourceGasBudget:      f.thorSourceGasBudget(ctx, quote.GasLimit),
+		ThorInbound:          quote.InboundAddress,
 		ThorEstimatedSeconds: quote.EstimatedSeconds,
 		ThorFees:             quote.TotalFees,
 		BTCAddress:           btcAddress,
@@ -152,78 +156,58 @@ func (f *Flow) EstimateThorchain(
 	}, nil
 }
 
-// ExecuteThorchain re-quotes at execution time (fresh price + memo), fetches the
-// current inbound vault, and sends the EVM transaction. Mirrors
-// swap-flow.service.ts executeThorchain.
-func (f *Flow) ExecuteThorchain(
-	ctx context.Context,
-	privateKey string,
-	fromToken TokenInfo,
-	usdAmount, btcAddress string,
-) FlowResult {
-	applog.Tracef("swap.Flow.ExecuteThorchain — %s → BTC $%s btc=%s",
-		fromToken.Symbol, usdAmount, btcAddress)
-
-	usd, err := strconv.ParseFloat(usdAmount, 64)
-	if err != nil || usd <= 0 {
-		return failResult(fromToken, btcToken, usdAmount, "USD amount must be a positive number")
+// thorSourceGasBudget prices the deposit's gas budget in the source asset.
+// Approval, when needed, is a separate transaction.
+func (f *Flow) thorSourceGasBudget(ctx context.Context, gasLimit int64) string {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	price, err := f.client.SuggestGasPrice(ctx)
+	if err != nil || price.Sign() <= 0 {
+		return ""
 	}
-	if strings.TrimSpace(btcAddress) == "" {
-		return failResult(fromToken, btcToken, usdAmount, "Bitcoin address is required")
-	}
+	cost := new(big.Int).Mul(price, big.NewInt(gasLimit))
+	return balance.FormatUnits(cost, f.chain.NativeDecimals) + " " + f.chain.NativeSymbol
+}
 
+// ExecuteThorchain submits the reviewed amount and memo after rechecking the
+// current vault.
+func (f *Flow) ExecuteThorchain(ctx context.Context, privateKey string, quote FlowQuote) FlowResult {
+	fail := func(reason string) FlowResult {
+		return failResult(quote.FromToken, btcToken, quote.USDAmount, reason)
+	}
+	if !quote.IsThorchain || quote.ThorMemo == "" || quote.BTCAddress == "" {
+		return fail("THORChain quote is required")
+	}
+	if !time.Now().Before(quote.ExpiresAt) {
+		return fail("quote expired — refresh quotes before confirming")
+	}
 	executor, err := thorchain.NewExecutor(f.client, privateKey, f.chainKey)
 	if err != nil {
-		return failResult(fromToken, btcToken, usdAmount, err.Error())
+		return fail(err.Error())
+	}
+	inbound, err := thorchain.NewProvider().GetInboundAddress(ctx, f.chainKey)
+	if err != nil {
+		return fail(err.Error())
+	}
+	if quote.ThorInbound != "" && !strings.EqualFold(quote.ThorInbound, inbound.VaultAddress) {
+		return fail("THORChain vault changed — refresh quotes before confirming")
 	}
 
-	conv, err := f.ConvertUsdToTokenAmount(ctx, fromToken, usd)
-	if err != nil {
-		return failResult(fromToken, btcToken, usdAmount, err.Error())
-	}
-	fromTokenAmount := conv.TokenAmount
-
-	fromAsset, err := f.thorAssetString(fromToken)
-	if err != nil {
-		return failResult(fromToken, btcToken, usdAmount, err.Error())
-	}
-	thorAmount, err := thorchain.ToThorBaseUnits(fromTokenAmount)
-	if err != nil {
-		return failResult(fromToken, btcToken, usdAmount, err.Error())
-	}
-
-	provider := thorchain.NewProvider()
-	quote, err := provider.GetSwapQuote(ctx, fromAsset, thorAmount, btcAddress)
-	if err != nil {
-		var bm *thorchain.BelowMinError
-		if errors.As(err, &bm) {
-			return failResult(fromToken, btcToken, usdAmount,
-				belowMinErr(fromToken.Symbol, bm.MinIn, conv.PricePerToken).Error())
-		}
-		return failResult(fromToken, btcToken, usdAmount, err.Error())
-	}
-	// Always fetch a fresh inbound vault — THORchain rotates them.
-	inbound, err := provider.GetInboundAddress(ctx, f.chainKey)
-	if err != nil {
-		return failResult(fromToken, btcToken, usdAmount, err.Error())
-	}
-
-	res, err := f.sendThorSwap(ctx, executor, inbound, fromToken, fromTokenAmount, quote.Memo)
+	res, err := f.sendThorSwap(ctx, executor, inbound, quote)
 	if err != nil {
 		applog.Error("swap.Flow.ExecuteThorchain failed", err)
-		return failResult(fromToken, btcToken, usdAmount, err.Error())
+		return fail(err.Error())
 	}
-
-	applog.Infof("thorchain swap executed — txHash=%s expectedBtc=%s gas=%s",
-		res.TxHash, quote.ExpectedOutput, res.GasUsed)
+	applog.Infof("thorchain swap submitted — txHash=%s expectedBtc=%s gas=%s",
+		res.TxHash, quote.EstimatedOutput, res.GasUsed)
 
 	return FlowResult{
 		Success:      true,
 		TxHash:       res.TxHash,
-		FromToken:    fromToken.Symbol,
+		FromToken:    quote.FromToken.Symbol,
 		ToToken:      "BTC",
-		InputAmount:  fmt.Sprintf("$%s", usdAmount),
-		OutputAmount: quote.ExpectedOutput,
+		InputAmount:  quote.USDAmountFormatted,
+		OutputAmount: quote.EstimatedOutput,
 		GasUsed:      res.GasUsed,
 	}
 }
@@ -234,18 +218,18 @@ func (f *Flow) sendThorSwap(
 	ctx context.Context,
 	executor *thorchain.Executor,
 	inbound thorchain.InboundAddress,
-	fromToken TokenInfo,
-	fromTokenAmount, memo string,
+	quote FlowQuote,
 ) (thorchain.Result, error) {
+	fromToken := quote.FromToken
 	if fromToken.Address == NativeSentinel {
-		return executor.SwapNativeToBtc(ctx, inbound.VaultAddress, fromTokenAmount, memo)
+		return executor.SwapNativeToBtc(ctx, inbound.VaultAddress, quote.FromTokenAmount, quote.ThorMemo, quote.ExpiresAt)
 	}
 	routerAddress := inbound.Router
 	if routerAddress == "" {
 		routerAddress = f.chain.RouterAddress
 	}
 	return executor.SwapErc20ToBtc(ctx, routerAddress, inbound.VaultAddress,
-		fromToken.Address, fromToken.Symbol, fromToken.Decimals, fromTokenAmount, memo)
+		fromToken.Address, fromToken.Symbol, fromToken.Decimals, quote.FromTokenAmount, quote.ThorMemo, quote.ExpiresAt)
 }
 
 // thorMin renders THORChain's recommended minimum (1e8 base units) as a

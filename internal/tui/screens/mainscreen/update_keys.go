@@ -20,6 +20,13 @@ func (m Model) handleNormalKey(k tea.KeyMsg) (Model, tea.Cmd, bool) {
 		next, cmd := m.routeToActiveTab(k)
 		return next, cmd, true
 	}
+	if m.focus == focusRight && m.activeTab == tabSwapBTC && m.swapbtc.ShowingQuotes() {
+		switch k.String() {
+		case "r", "y":
+			next, cmd := m.routeToActiveTab(k)
+			return next, cmd, true
+		}
+	}
 	if next, cmd, handled := m.handleTabSwitchKey(k); handled {
 		return next, cmd, true
 	}

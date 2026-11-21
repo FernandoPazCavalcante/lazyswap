@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -40,12 +41,16 @@ type FlowQuote struct {
 	Slippage      float64 `json:"slippage"`
 	NeedsApproval bool    `json:"needsApproval"`
 
+	ExpiresAt       time.Time `json:"-"`
+	SourceGasBudget string    `json:"-"`
+
 	// THORchain-specific fields, set when IsThorchain is true (EVM → BTC).
 	IsThorchain          bool   `json:"isThorchain"`
 	ThorEstimatedSeconds int    `json:"thorEstimatedSeconds,omitempty"` // settlement estimate in seconds
 	ThorFees             string `json:"thorFees,omitempty"`             // total fees in BTC, formatted
 	BTCAddress           string `json:"btcAddress,omitempty"`           // destination Bitcoin address (empty for estimate)
 	ThorMemo             string `json:"thorMemo,omitempty"`             // encoded THORchain memo (empty for estimate)
+	ThorInbound          string `json:"-"`                              // vault recorded in the reviewed quote
 	EstimatedOutputSats  int64  `json:"estimatedOutputSats,omitempty"`  // expected BTC output in sats (1e8 base units)
 
 	// THORChain enforces a per-token minimum input (covers the BTC network

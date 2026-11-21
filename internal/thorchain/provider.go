@@ -25,9 +25,11 @@ type SwapQuote struct {
 	MinOutput        string // minimum BTC after MemoSlippage, formatted
 	TotalFees        string // total fees denominated in BTC, formatted
 	EstimatedSeconds int    // estimated settlement time
-	GasLimit         string // recommended EVM gas limit
+	GasLimit         int64  // EVM gas budget for the deposit
 	Memo             string // memo to embed in the EVM transaction (empty for estimate-only)
-	RecommendedMinIn int64  // THORChain's recommended minimum input, in 1e8 base units (0 if unknown)
+	ExpiresAt        time.Time
+	InboundAddress   string
+	RecommendedMinIn int64 // THORChain's recommended minimum input, in 1e8 base units (0 if unknown)
 }
 
 // BelowMinError is returned when the swap amount is under THORChain's
@@ -75,8 +77,11 @@ type quoteResponse struct {
 		Asset string `json:"asset"`
 	} `json:"fees"`
 	OutboundDelaySeconds   int    `json:"outbound_delay_seconds"`
+	InboundConfirmSeconds  int    `json:"inbound_confirmation_seconds"`
+	TotalSwapSeconds       int    `json:"total_swap_seconds"`
 	Memo                   string `json:"memo"`
 	InboundAddress         string `json:"inbound_address"`
+	Expiry                 int64  `json:"expiry"`
 	RecommendedMinAmountIn string `json:"recommended_min_amount_in"`
 	Error                  string `json:"error"`   // generic error field
 	Message                string `json:"message"` // THORnode error, e.g. "amount less than dust threshold"
@@ -102,6 +107,7 @@ func (p *Provider) GetSwapQuote(ctx context.Context, fromAsset, fromAmount, btcA
 	q.Set("amount", fromAmount)
 	if btcAddress != "" {
 		q.Set("destination", btcAddress)
+		q.Set("liquidity_tolerance_bps", strconv.Itoa(MemoSlippageBPS))
 	}
 	endpoint := p.NodeURL + "/thorchain/quote/swap?" + q.Encode()
 
@@ -127,45 +133,78 @@ func (p *Provider) GetSwapQuote(ctx context.Context, fromAsset, fromAmount, btcA
 		}
 		return SwapQuote{}, fmt.Errorf("THORnode quote error: %s", msg)
 	}
+	return data.swapQuote(btcAddress)
+}
+
+func (data quoteResponse) swapQuote(btcAddress string) (SwapQuote, error) {
 	if data.ExpectedAmountOut == "" {
 		return SwapQuote{}, fmt.Errorf("THORnode returned no expected_amount_out")
 	}
 
 	expectedSats, ok := new(big.Int).SetString(data.ExpectedAmountOut, 10)
-	if !ok {
+	if !ok || !expectedSats.IsInt64() || expectedSats.Sign() <= 0 {
 		return SwapQuote{}, fmt.Errorf("THORnode expected_amount_out not an integer: %q", data.ExpectedAmountOut)
 	}
 	recMinIn, _ := strconv.ParseInt(data.RecommendedMinAmountIn, 10, 64)
 	expectedF, _ := new(big.Float).SetInt(expectedSats).Float64()
 	minSats := int64(math.Floor(expectedF * (1 - MemoSlippage)))
 
-	feeSats := 0.0
-	if data.Fees.Total != "" {
-		feeSats, _ = strconv.ParseFloat(data.Fees.Total, 64)
+	var fees string
+	if data.Fees.Asset == "" || data.Fees.Asset == BTCAsset {
+		if total, err := strconv.ParseUint(data.Fees.Total, 10, 64); err == nil {
+			fees = formatSats(float64(total))
+		}
 	}
 
-	estimatedSeconds := data.OutboundDelaySeconds
+	estimatedSeconds := data.TotalSwapSeconds
 	if estimatedSeconds == 0 {
-		estimatedSeconds = BTCEstimatedSeconds
+		estimatedSeconds = data.InboundConfirmSeconds + data.OutboundDelaySeconds
 	}
 
 	// Memo is only needed to execute (requires a destination). For an
 	// estimate-only quote (no btcAddress) we leave it empty.
 	memo := data.Memo
-	if memo == "" && btcAddress != "" {
-		memo = fmt.Sprintf("=:%s:%s:%d", BTCAsset, btcAddress, minSats)
+	if btcAddress != "" {
+		if memo == "" {
+			memo = fmt.Sprintf("=:%s:%s:%d", BTCAsset, btcAddress, minSats)
+		} else {
+			var err error
+			minSats, err = memoMinimum(memo, btcAddress, expectedSats.Int64())
+			if err != nil {
+				return SwapQuote{}, err
+			}
+		}
+	}
+	var expiry time.Time
+	if data.Expiry > 0 {
+		expiry = time.Unix(data.Expiry, 0)
 	}
 
 	return SwapQuote{
 		ExpectedOutput:   formatSats(expectedF),
 		ExpectedSats:     expectedSats.Int64(),
 		MinOutput:        formatSats(float64(minSats)),
-		TotalFees:        formatSats(feeSats),
+		TotalFees:        fees,
 		EstimatedSeconds: estimatedSeconds,
-		GasLimit:         "300000",
+		GasLimit:         defaultEVMGasLimit,
 		Memo:             memo,
+		ExpiresAt:        expiry,
+		InboundAddress:   data.InboundAddress,
 		RecommendedMinIn: recMinIn,
 	}, nil
+}
+
+func memoMinimum(memo, destination string, expected int64) (int64, error) {
+	fields := strings.Split(memo, ":")
+	if len(fields) < 4 || fields[2] != destination {
+		return 0, fmt.Errorf("THORChain returned a memo that does not match the BTC destination")
+	}
+	limit, _, _ := strings.Cut(fields[3], "/")
+	minimum, err := strconv.ParseInt(limit, 10, 64)
+	if err != nil || minimum <= 0 || minimum > expected {
+		return 0, fmt.Errorf("THORChain returned an invalid minimum in the swap memo")
+	}
+	return minimum, nil
 }
 
 // GetInboundAddress fetches the current vault address for chainKey. THORchain

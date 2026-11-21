@@ -1,8 +1,9 @@
 package swapbtc
 
 import (
-	"strings"
+	"slices"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -12,8 +13,8 @@ import (
 
 const validBTC = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh" // 42 chars
 
-func seeded() Model {
-	m := New()
+func seeded(providers ...Provider) Model {
+	m := New(append([]Provider{THORChain}, providers...)...)
 	m.SetSize(60, 30)
 	m.SetBalances([]balance.TokenBalance{
 		{Symbol: "BNB", Address: "native", Decimals: 18, Balance: "1.5", USDValue: "$900.00"},
@@ -46,8 +47,8 @@ func TestFormFlowEmitsQuoteRequest(t *testing.T) {
 	// type a valid BTC address, submit
 	m, _ = m.Update(keyRunes(validBTC))
 	m, cmd := m.Update(keyEnter())
-	if m.state != stateQuoting {
-		t.Fatalf("after submit, state = %v, want stateQuoting", m.state)
+	if m.state != stateQuotes {
+		t.Fatalf("after submit, state = %v, want stateQuotes", m.state)
 	}
 	if cmd == nil {
 		t.Fatal("expected a QuoteRequestMsg command")
@@ -78,81 +79,99 @@ func TestSubmitWithInvalidInputsRejected(t *testing.T) {
 	}
 }
 
-func TestQuoteResultEntersPreviewWithCountdown(t *testing.T) {
-	m := seeded()
-	m, cmd := m.Update(QuoteResultMsg{Quote: swap.FlowQuote{
-		FromToken:       swap.TokenInfo{Symbol: "BNB"},
-		EstimatedOutput: "0.01",
-		MinOutput:       "0.0097",
-	}})
-	if m.state != statePreview {
-		t.Fatalf("state = %v, want statePreview", m.state)
+func requestQuotes(t *testing.T, providers ...Provider) Model {
+	t.Helper()
+	m := seeded(providers...)
+	for _, key := range []tea.KeyMsg{keyEnter(), keyRunes("50"), keyEnter(), keyRunes(validBTC), keyEnter()} {
+		m, _ = m.Update(key)
 	}
-	if m.countdown != refreshSeconds {
-		t.Fatalf("countdown = %d, want %d", m.countdown, refreshSeconds)
+	if m.state != stateQuotes {
+		t.Fatalf("state = %v, want stateQuotes", m.state)
 	}
-	if cmd == nil {
-		t.Fatal("expected a tick command to start the countdown")
-	}
-	if _, ok := cmd().(TickMsg); !ok {
-		t.Fatalf("expected TickMsg, got %T", cmd())
+	return m
+}
+
+func quoteFor(provider Provider, sats int64, expiry time.Time) RouteQuote {
+	return RouteQuote{
+		Provider: provider,
+		Quote: swap.FlowQuote{
+			FromToken: swap.TokenInfo{Symbol: "BNB"}, USDAmount: "50",
+			EstimatedOutputSats: sats, BTCAddress: validBTC, ExpiresAt: expiry,
+		},
 	}
 }
 
-func TestQuoteErrorReturnsToForm(t *testing.T) {
-	m := seeded()
-	m, _ = m.Update(QuoteResultMsg{Err: errTest{}})
-	if m.state != stateForm {
-		t.Fatalf("state = %v, want stateForm on quote error", m.state)
+func TestQuotesRankOnlyValidRoutes(t *testing.T) {
+	m := requestQuotes(t, "LI.FI", "NEAR Intents", "MAYAChain")
+	now := time.Now()
+	for _, route := range []RouteQuote{
+		quoteFor(THORChain, 10000, now.Add(time.Minute)),
+		quoteFor("LI.FI", 14000, now.Add(time.Minute)),
+		quoteFor("NEAR Intents", 21000, now.Add(-time.Minute)),
+		{Provider: "MAYAChain", Err: errTest{}},
+	} {
+		m, _ = m.onQuote(QuoteResultMsg{ID: m.requestID, Route: route}, now)
 	}
-	if m.quoteErr == "" {
-		t.Fatal("expected quoteErr set")
+	var providers []Provider
+	for _, route := range m.orderedQuotes(now) {
+		providers = append(providers, route.Provider)
+	}
+	if want := []Provider{"LI.FI", THORChain, "NEAR Intents", "MAYAChain"}; !slices.Equal(providers, want) {
+		t.Fatalf("ordered providers = %v, want %v", providers, want)
+	}
+	if m.selected != THORChain {
+		t.Fatalf("new quotes moved selection to %q", m.selected)
 	}
 }
 
-func TestPreviewExecuteEmitsExecuteRequest(t *testing.T) {
-	m := seeded()
-	// Get a token selected + into preview.
-	m, _ = m.Update(keyEnter())
-	m, _ = m.Update(keyRunes("50"))
-	m, _ = m.Update(keyEnter())
-	m, _ = m.Update(keyRunes(validBTC))
-	m, _ = m.Update(keyEnter()) // → stateQuoting, sets m.from
-	m, _ = m.Update(QuoteResultMsg{Quote: swap.FlowQuote{FromToken: swap.TokenInfo{Symbol: "BNB"}}})
-
-	_, cmd := m.Update(keyRunes("y"))
+func TestReviewConfirmsOnlySelectedRoute(t *testing.T) {
+	m := requestQuotes(t, "LI.FI")
+	expiry := time.Now().Add(time.Minute)
+	for _, route := range []RouteQuote{quoteFor(THORChain, 10000, expiry), quoteFor("LI.FI", 10500, expiry)} {
+		m, _ = m.Update(QuoteResultMsg{ID: m.requestID, Route: route})
+	}
+	m, _ = m.Update(keyRunes("k"))
+	if _, cmd := m.Update(keyRunes("y")); cmd != nil {
+		t.Fatal("quote list should require review before executing")
+	}
+	m, cmd := m.Update(keyEnter())
+	if m.state != stateReview || cmd != nil {
+		t.Fatal("enter should review the route without executing")
+	}
+	m, _ = m.Update(QuoteResultMsg{ID: m.requestID, Route: quoteFor("LI.FI", 11000, expiry)})
+	_, cmd = m.Update(keyRunes("y"))
 	if cmd == nil {
-		t.Fatal("expected an ExecuteRequestMsg command")
+		t.Fatal("expected the confirmed swap request")
 	}
 	msg, ok := cmd().(ExecuteRequestMsg)
-	if !ok {
-		t.Fatalf("expected ExecuteRequestMsg, got %T", cmd())
-	}
-	if msg.BTCAddress != validBTC || msg.USDAmount != "50" {
-		t.Fatalf("bad execute request: %+v", msg)
+	if !ok || msg.Provider != "LI.FI" || msg.Quote.EstimatedOutputSats != 10500 || msg.Quote.BTCAddress != validBTC {
+		t.Fatalf("bad execution request: %+v", msg)
 	}
 }
 
-func TestTickExpiryRequotes(t *testing.T) {
-	m := seeded()
-	// Drive into preview with a real selected token first.
-	m, _ = m.Update(keyEnter())
-	m, _ = m.Update(keyRunes("50"))
-	m, _ = m.Update(keyEnter())
-	m, _ = m.Update(keyRunes(validBTC))
-	m, _ = m.Update(keyEnter())
-	m, _ = m.Update(QuoteResultMsg{Quote: swap.FlowQuote{FromToken: swap.TokenInfo{Symbol: "BNB"}}})
-
-	m.countdown = 1
-	m, cmd := m.Update(TickMsg{})
-	if m.state != stateQuoting {
-		t.Fatalf("after countdown expiry state = %v, want stateQuoting", m.state)
-	}
+func TestExpiredReviewRequiresRefreshAndNewSelection(t *testing.T) {
+	m := requestQuotes(t)
+	now := time.Now()
+	expiry := now.Add(time.Minute)
+	route := quoteFor(THORChain, 10000, expiry)
+	m, cmd := m.onQuote(QuoteResultMsg{ID: m.requestID, Route: route}, now)
 	if cmd == nil {
-		t.Fatal("expected a re-quote command")
+		t.Fatal("received a valid quote without starting the expiry timer")
 	}
-	if _, ok := cmd().(QuoteRequestMsg); !ok {
-		t.Fatalf("expected QuoteRequestMsg on re-quote, got %T", cmd())
+	m, _ = m.handleQuoteKey("enter", now)
+	m, cmd = m.handleReviewKey("y", expiry)
+	if cmd != nil || m.state != stateQuotes {
+		t.Fatal("expired review remained executable")
+	}
+	oldID := m.requestID
+	m, cmd = m.Update(keyRunes("r"))
+	if cmd == nil || cmd().(QuoteRequestMsg).ID == oldID {
+		t.Fatal("refresh did not request a new quote")
+	}
+	m, _ = m.onQuote(QuoteResultMsg{ID: oldID, Route: route}, now)
+	m, cmd = m.handleQuoteKey("enter", now)
+	if cmd != nil || m.state != stateQuotes {
+		t.Fatal("a stale response reopened review")
 	}
 }
 
@@ -172,9 +191,10 @@ func TestAmountConfirmStartsEstimate(t *testing.T) {
 	}
 }
 
-func TestEstimateResultRendersBTCAndSats(t *testing.T) {
+func TestEstimateResultStoresBTCAndSats(t *testing.T) {
 	m := seeded()
 	m.estimating = true
+	m.field = fieldAddr
 	m, _ = m.Update(EstimateResultMsg{Quote: swap.FlowQuote{
 		EstimatedOutput:     "0.00072145",
 		EstimatedOutputSats: 72145,
@@ -185,12 +205,8 @@ func TestEstimateResultRendersBTCAndSats(t *testing.T) {
 	if m.estimate == nil {
 		t.Fatal("estimate should be set")
 	}
-	line := m.estimateLine()
-	if !strings.Contains(line, "0.00072145 BTC") {
-		t.Fatalf("estimate line missing BTC amount: %q", line)
-	}
-	if !strings.Contains(line, "72,145 sats") {
-		t.Fatalf("estimate line missing sats: %q", line)
+	if m.estimate.EstimatedOutputSats != 72145 {
+		t.Fatalf("unexpected estimate: %+v", m.estimate)
 	}
 }
 

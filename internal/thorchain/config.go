@@ -17,13 +17,12 @@ const (
 	// BTCAsset is the canonical THORchain asset string for Bitcoin.
 	BTCAsset = "BTC.BTC"
 
-	// MemoSlippage is the tolerance applied to the quote when building the swap
-	// memo: minOutput = estimated * (1 - MemoSlippage). 0.03 == 3%.
-	MemoSlippage = 0.03
+	// MemoSlippageBPS is the requested price tolerance (300 bps = 3%).
+	MemoSlippageBPS = 300
+	// MemoSlippage expresses the tolerance as a fraction for fallback memos.
+	MemoSlippage = float64(MemoSlippageBPS) / 10000
 
-	// BTCEstimatedSeconds is the fallback settlement estimate (~10 min) shown in
-	// the preview when Midgard does not return outbound_delay_seconds.
-	BTCEstimatedSeconds = 600
+	defaultEVMGasLimit = 300000
 
 	// AffiliateBPS is the THORchain affiliate fee in basis points (0 = none).
 	AffiliateBPS = 0

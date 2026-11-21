@@ -2,10 +2,12 @@ package thorchain
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestBuildNativeAssetString(t *testing.T) {
@@ -49,6 +51,9 @@ func TestGetSwapQuoteParsesAndAppliesSlippage(t *testing.T) {
 		if r.URL.Path != "/thorchain/quote/swap" {
 			t.Errorf("unexpected path %s", r.URL.Path)
 		}
+		if got := r.URL.Query().Get("liquidity_tolerance_bps"); got != "300" {
+			t.Errorf("liquidity tolerance = %s, want 300 bps", got)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		// 1_000_000 sats == 0.01 BTC expected out, no memo provided.
 		_, _ = w.Write([]byte(`{"expected_amount_out":"1000000","fees":{"total":"20000"},"outbound_delay_seconds":540,"recommended_min_amount_in":"123456"}`))
@@ -80,6 +85,32 @@ func TestGetSwapQuoteParsesAndAppliesSlippage(t *testing.T) {
 	want := "=:BTC.BTC:bc1qexampleaddressxxxxxxxxxxxxxx:970000"
 	if q.Memo != want {
 		t.Fatalf("Memo = %q, want %q", q.Memo, want)
+	}
+}
+
+func TestSwapQuoteUsesReviewedMemoMinimumAndExpiry(t *testing.T) {
+	const destination = "bc1qexampleaddressxxxxxxxxxxxxxx"
+	var data quoteResponse
+	err := json.Unmarshal([]byte(`{
+		"expected_amount_out":"1000000", "fees":{"asset":"BTC.BTC","total":"20000"},
+		"expiry":1795302000, "total_swap_seconds":600, "inbound_address":"vault",
+		"memo":"=:BTC.BTC:bc1qexampleaddressxxxxxxxxxxxxxx:975000/1/0"
+	}`), &data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, err := data.swapQuote(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.MinOutput != "0.00975000" || !q.ExpiresAt.Equal(time.Unix(1795302000, 0)) {
+		t.Fatalf("reviewed limits do not match provider: %+v", q)
+	}
+	if q.EstimatedSeconds != 600 || q.InboundAddress != "vault" || q.TotalFees != "0.00020000" {
+		t.Fatalf("unexpected route details: %+v", q)
+	}
+	if _, err := data.swapQuote("another-btc-address"); err == nil {
+		t.Fatal("accepted memo for a different destination")
 	}
 }
 

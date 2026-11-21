@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -16,7 +17,7 @@ func (m Model) View() string {
 	body := m.bodyForState()
 	help := theme.Dim().Render(m.helpForState())
 	titled := lipgloss.JoinVertical(lipgloss.Left,
-		theme.Text().Bold(true).Padding(0, 1).Render("Swap BTC (via THORchain)"),
+		theme.Text().Bold(true).Padding(0, 1).Render("Swap BTC"),
 		"",
 		body,
 		"",
@@ -39,10 +40,10 @@ func (m Model) bodyForState() string {
 	switch m.state {
 	case stateForm:
 		return m.formBody()
-	case stateQuoting:
-		return theme.Dim().Render("  Estimating via THORchain…")
-	case statePreview:
-		return m.previewBody()
+	case stateQuotes:
+		return m.quotesBody(time.Now())
+	case stateReview:
+		return m.reviewBody(time.Now())
 	case stateExecuting:
 		return theme.Text().Render("  Submitting transaction…")
 	case stateDone:
@@ -90,7 +91,7 @@ func (m Model) estimateLine() string {
 	case m.estimateErr != "":
 		return theme.Dim().Render("  (estimate unavailable)")
 	case m.estimate != nil:
-		s := theme.Text().Render(fmt.Sprintf("  ≈ %s BTC  (%s sats)",
+		s := theme.Text().Render(fmt.Sprintf("  THORChain ≈ %s BTC (%s sats)",
 			m.estimate.EstimatedOutput, formatSats(m.estimate.EstimatedOutputSats)))
 		if m.estimate.ThorMinTokenAmount != "" {
 			s += theme.Dim().Render(fmt.Sprintf("   · min %s %s",
@@ -102,34 +103,6 @@ func (m Model) estimateLine() string {
 	}
 }
 
-func (m Model) previewBody() string {
-	if m.quoteErr != "" {
-		return theme.Error().Render("  Quote failed: " + m.quoteErr)
-	}
-	if m.quote == nil {
-		return theme.Dim().Render("  Loading quote…")
-	}
-	q := m.quote
-	eta := "~10 min"
-	if q.ThorEstimatedSeconds > 0 {
-		eta = fmt.Sprintf("~%d min", (q.ThorEstimatedSeconds+59)/60)
-	}
-	lines := []string{
-		fmt.Sprintf("  %s ≈ %s %s %s", q.USDAmountFormatted, q.FromTokenAmount, q.FromToken.Symbol, q.FromTokenPriceLine),
-		fmt.Sprintf("  %s %s → %s BTC", q.FromTokenAmount, q.FromToken.Symbol, q.EstimatedOutput),
-		fmt.Sprintf("  Min output: %s BTC (3%% THORchain slippage)", q.MinOutput),
-		fmt.Sprintf("  Fees: %s BTC  |  ETA: %s", q.ThorFees, eta),
-	}
-	if q.NeedsApproval {
-		lines = append(lines, theme.Dim().Render("  ⚠ Token approval required (auto-handled on execute)"))
-	}
-	lines = append(lines,
-		fmt.Sprintf("  Destination: %s", q.BTCAddress),
-		theme.Dim().Render(fmt.Sprintf("  Price refreshes in %ds", m.countdown)),
-	)
-	return lipgloss.JoinVertical(lipgloss.Left, lines...)
-}
-
 func (m Model) helpForState() string {
 	switch m.state {
 	case stateForm:
@@ -139,8 +112,13 @@ func (m Model) helpForState() string {
 		default:
 			return "type value  ·  enter: next/quote  ·  esc: back"
 		}
-	case statePreview:
-		return "y/enter: execute  ·  n/esc: edit"
+	case stateQuotes:
+		if m.width >= tableWidth {
+			return "j/k select · Enter review · r refresh · Esc edit"
+		}
+		return "j/k · Space details · Enter review · r refresh · Esc"
+	case stateReview:
+		return "y confirm swap · r refresh · Esc quotes"
 	case stateExecuting:
 		return "waiting for receipt…"
 	case stateDone:

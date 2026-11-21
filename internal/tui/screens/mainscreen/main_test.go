@@ -3,18 +3,57 @@ package mainscreen
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/FernandoPazCavalcante/lazyswap/internal/balance"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/crypto"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/settings"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/importoverlay"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/tui/overlays/seedoverlay"
 	settingspanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/settings"
+	swapbtcpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/swapbtc"
 	"github.com/FernandoPazCavalcante/lazyswap/internal/wallet"
 )
 
 const hardhatPhrase = "test test test test test test test test test test test junk"
+
+func TestSwapBTCReviewReceivesConfirmKey(t *testing.T) {
+	m := newModel(t)
+	m.swapbtc.SetBalances([]balance.TokenBalance{{Symbol: "BNB", Address: "native", Decimals: 18}})
+	m.activeTab, m.focus = tabSwapBTC, focusRight
+	const destination = "bc1qexampleaddressxxxxxxxxxxxxxx"
+	enter := tea.KeyMsg{Type: tea.KeyEnter}
+	var cmd tea.Cmd
+	for _, key := range []tea.KeyMsg{
+		enter, {Type: tea.KeyRunes, Runes: []rune("25")}, enter,
+		{Type: tea.KeyRunes, Runes: []rune(destination)}, enter,
+	} {
+		m, cmd = m.Update(key)
+	}
+	if cmd == nil {
+		t.Fatal("missing quote request")
+	}
+	request, ok := cmd().(swapbtcpanel.QuoteRequestMsg)
+	if !ok {
+		t.Fatal("expected a request for BTC quotes")
+	}
+	m, _ = m.Update(swapbtcpanel.QuoteResultMsg{ID: request.ID, Route: swapbtcpanel.RouteQuote{
+		Provider: swapbtcpanel.THORChain,
+		Quote:    swap.FlowQuote{BTCAddress: destination, EstimatedOutputSats: 15000, ExpiresAt: time.Now().Add(time.Minute)},
+	}})
+	m, _ = m.Update(enter)
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	if cmd == nil {
+		t.Fatal("global shortcut swallowed BTC swap confirmation")
+	}
+	execution, ok := cmd().(swapbtcpanel.ExecuteRequestMsg)
+	if !ok || execution.Provider != swapbtcpanel.THORChain || execution.Quote.BTCAddress != destination {
+		t.Fatalf("wrong confirmation: %+v", execution)
+	}
+}
 
 func newModel(t *testing.T) Model {
 	t.Helper()
