@@ -13,6 +13,8 @@ import (
 
 const validBTC = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh" // 42 chars
 
+const THORChain = swap.THORChain
+
 func seeded(providers ...Provider) Model {
 	m := New(append([]Provider{THORChain}, providers...)...)
 	m.SetSize(60, 30)

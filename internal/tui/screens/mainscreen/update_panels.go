@@ -11,7 +11,7 @@ import (
 	swapbtcpanel "github.com/FernandoPazCavalcante/lazyswap/internal/tui/panels/swapbtc"
 )
 
-// handleSwapBTCMsg handles Swap BTC tab requests and THORchain results.
+// handleSwapBTCMsg handles Swap BTC tab requests and provider results.
 // handled=false for any other message.
 func (m Model) handleSwapBTCMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 	switch msg := msg.(type) {
@@ -19,20 +19,25 @@ func (m Model) handleSwapBTCMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		if m.current == nil {
 			return m, nil, true
 		}
-		return m, thorQuoteCmd(m.flowSvc, msg), true
+		var cmds []tea.Cmd
+		for _, p := range m.btcProviders {
+			cmds = append(cmds, btcQuoteCmd(p, m.flowSvc, msg))
+		}
+		return m, tea.Batch(cmds...), true
 	case swapbtcpanel.ExecuteRequestMsg:
 		if m.current == nil || !m.swapbtc.IsExecuting(msg.ID) {
 			return m, nil, true
 		}
-		if msg.Provider != swapbtcpanel.THORChain {
-			m.swapbtc, _ = m.swapbtc.Update(swapbtcpanel.ExecutionResultMsg{
-				ID: msg.ID, Result: swap.FlowResult{Err: "swap provider not configured"},
-			})
-			return m, nil, true
+		for _, p := range m.btcProviders {
+			if p.ID == msg.Provider {
+				applog.Tracef("mainscreen — executing BTC swap via %s for %s", p.ID, m.current.Address)
+				return m, btcExecuteCmd(p, m.flowSvc, m.current.PrivateKey, msg), true
+			}
 		}
-		applog.Tracef("mainscreen — executing BTC swap %s → BTC $%s for %s",
-			msg.Quote.FromToken.Symbol, msg.Quote.USDAmount, m.current.Address)
-		return m, thorExecuteCmd(m.flowSvc, m.current.PrivateKey, msg), true
+		m.swapbtc, _ = m.swapbtc.Update(swapbtcpanel.ExecutionResultMsg{
+			ID: msg.ID, Result: swap.FlowResult{Err: "swap provider not configured"},
+		})
+		return m, nil, true
 	case swapbtcpanel.QuoteResultMsg, swapbtcpanel.ExecutionResultMsg, swapbtcpanel.TickMsg:
 		next, cmd := m.onSwapBTCResult(msg)
 		return next, cmd, true

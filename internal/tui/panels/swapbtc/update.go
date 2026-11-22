@@ -35,6 +35,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(k tea.KeyMsg) (Model, tea.Cmd) {
+	if len(m.providers) == 0 {
+		return m, nil
+	}
 	if k.Type == tea.KeyEsc {
 		return m.handleEsc()
 	}

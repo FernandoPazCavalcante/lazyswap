@@ -123,30 +123,29 @@ func executeSwapCmd(f *swap.Flow, privateKey string, from, to swap.TokenInfo, us
 	}
 }
 
-func thorQuoteCmd(f *swap.Flow, req swapbtcpanel.QuoteRequestMsg) tea.Cmd {
+func btcQuoteCmd(p swap.BTCProvider, f *swap.Flow, req swapbtcpanel.QuoteRequestMsg) tea.Cmd {
 	return func() tea.Msg {
-		result := swapbtcpanel.QuoteResultMsg{ID: req.ID, Route: swapbtcpanel.RouteQuote{Provider: swapbtcpanel.THORChain}}
+		result := swapbtcpanel.QuoteResultMsg{ID: req.ID, Route: swapbtcpanel.RouteQuote{Provider: p.ID}}
 		if f == nil {
 			result.Route.Err = fmt.Errorf("swap service not configured")
 			return result
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		q, err := f.GetThorchainQuote(ctx, req.From, req.USDAmount, req.BTCAddress)
-		result.Route.Quote, result.Route.Err = q, err
-		result.Route.FeeBTC, result.Route.ETASeconds = q.ThorFees, q.ThorEstimatedSeconds
+		result.Route = swapbtcpanel.RouteQuote(p.Quote(f, ctx, req.From, req.USDAmount, req.BTCAddress))
+		result.Route.Provider = p.ID
 		return result
 	}
 }
 
-func thorExecuteCmd(f *swap.Flow, privateKey string, req swapbtcpanel.ExecuteRequestMsg) tea.Cmd {
+func btcExecuteCmd(p swap.BTCProvider, f *swap.Flow, privateKey string, req swapbtcpanel.ExecuteRequestMsg) tea.Cmd {
 	return func() tea.Msg {
 		if f == nil {
 			return swapbtcpanel.ExecutionResultMsg{ID: req.ID, Result: swap.FlowResult{Err: "swap service not configured"}}
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 		defer cancel()
-		res := f.ExecuteThorchain(ctx, privateKey, req.Quote)
+		res := p.Execute(f, ctx, privateKey, req.Quote)
 		return swapbtcpanel.ExecutionResultMsg{ID: req.ID, Result: res}
 	}
 }

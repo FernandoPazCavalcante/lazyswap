@@ -1,7 +1,9 @@
 package mainscreen
 
 import (
+	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,8 +22,48 @@ import (
 
 const hardhatPhrase = "test test test test test test test test test test test junk"
 
+func TestSwapBTCDisabledByDefault(t *testing.T) {
+	m := newModel(t)
+	m.current = &wallet.Wallet{}
+	if !strings.Contains(m.swapbtc.View(), "No active BTC swap providers") {
+		t.Fatal("missing empty provider state")
+	}
+	if _, cmd, handled := m.handleSwapBTCMsg(swapbtcpanel.QuoteRequestMsg{}); !handled || cmd != nil {
+		t.Fatal("disabled provider received a quote request")
+	}
+}
+
+func TestSwapBTCRequestsEveryActiveProvider(t *testing.T) {
+	m := newModel(t)
+	m.current = &wallet.Wallet{}
+	m.flowSvc = &swap.Flow{}
+	quote := func(_ *swap.Flow, _ context.Context, from swap.TokenInfo, usd, address string) swap.BTCRouteQuote {
+		if from.Symbol != "BNB" || usd != "25" || address != "" {
+			t.Fatalf("wrong estimate inputs: %s %s %s", from.Symbol, usd, address)
+		}
+		return swap.BTCRouteQuote{FeeBTC: "0.00001"}
+	}
+	m.btcProviders = []swap.BTCProvider{{ID: "first", Quote: quote}, {ID: "second", Quote: quote}}
+	req := swapbtcpanel.QuoteRequestMsg{ID: 7, From: swap.TokenInfo{Symbol: "BNB"}, USDAmount: "25"}
+	_, cmd, handled := m.handleSwapBTCMsg(req)
+	if !handled || cmd == nil {
+		t.Fatal("missing provider quote commands")
+	}
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok || len(batch) != len(m.btcProviders) {
+		t.Fatalf("expected one quote command per provider, got %d", len(batch))
+	}
+	for i, run := range batch {
+		result, ok := run().(swapbtcpanel.QuoteResultMsg)
+		if !ok || result.ID != req.ID || result.Route.Provider != m.btcProviders[i].ID || result.Route.FeeBTC != "0.00001" {
+			t.Fatalf("incorrect provider result: %+v", result)
+		}
+	}
+}
+
 func TestSwapBTCReviewReceivesConfirmKey(t *testing.T) {
 	m := newModel(t)
+	m.swapbtc = swapbtcpanel.New("Test provider")
 	m.swapbtc.SetBalances([]balance.TokenBalance{{Symbol: "BNB", Address: "native", Decimals: 18}})
 	m.activeTab, m.focus = tabSwapBTC, focusRight
 	const destination = "bc1qexampleaddressxxxxxxxxxxxxxx"
@@ -42,17 +84,23 @@ func TestSwapBTCReviewReceivesConfirmKey(t *testing.T) {
 		t.Fatalf("expected BTC quotes for %q, got %+v", destination, request)
 	}
 	m, _ = m.Update(swapbtcpanel.QuoteResultMsg{ID: request.ID, Route: swapbtcpanel.RouteQuote{
-		Provider: swapbtcpanel.THORChain,
+		Provider: "Test provider",
 		Quote:    swap.FlowQuote{BTCAddress: destination, EstimatedOutputSats: 15000, ExpiresAt: time.Now().Add(time.Minute)},
 	}})
 	m, _ = m.Update(enter)
-	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	if cmd == nil {
 		t.Fatal("global shortcut swallowed BTC swap confirmation")
 	}
 	execution, ok := cmd().(swapbtcpanel.ExecuteRequestMsg)
-	if !ok || execution.Provider != swapbtcpanel.THORChain || execution.Quote.BTCAddress != destination {
+	if !ok || execution.Provider != "Test provider" || execution.Quote.BTCAddress != destination {
 		t.Fatalf("wrong confirmation: %+v", execution)
+	}
+	m.current = &wallet.Wallet{}
+	execution.Provider = swap.THORChain
+	m, cmd, handled := m.handleSwapBTCMsg(execution)
+	if !handled || cmd != nil || m.swapbtc.IsExecuting(execution.ID) {
+		t.Fatal("disabled provider execution was not rejected")
 	}
 }
 

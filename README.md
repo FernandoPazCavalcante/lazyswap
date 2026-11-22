@@ -10,13 +10,12 @@ from the command line. No exchange account, no deposits, no custodian. You hold
 the keys; the trade goes straight to a DEX.
 
 Runs on EVM chains (Ethereum, BSC) for on-chain DEX swaps (Uniswap V2 /
-PancakeSwap), plus cross-chain BTC swaps via THORchain.
+PancakeSwap).
 
 ## Highlights
 
-- **Cross-chain swaps to native BTC.** Send an EVM token and receive native
-  Bitcoin, routed through THORchain — no bridge, no wrapped BTC. One direction
-  only today: EVM → BTC. BTC → EVM is not implemented.
+- **Swap BTC availability.** THORChain is disabled. The TUI shows an empty
+  provider list until another BTC swap provider is enabled.
 - **Self-custody, no exchange.** You hold the keys; trades go straight to a DEX.
   No account, no KYC, no deposits, no withdrawal queue.
 - **Encrypted on disk.** Your private key is sealed with AES-256-GCM under a

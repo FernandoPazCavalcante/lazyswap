@@ -6,9 +6,7 @@ import (
 	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 )
 
-type Provider string
-
-const THORChain Provider = "THORChain"
+type Provider = swap.BTCProviderID
 
 // QuoteRequestMsg asks the parent for BTC estimates when BTCAddress is empty,
 // or quotes tied to that destination when it is set.
@@ -27,13 +25,7 @@ type ExecuteRequestMsg struct {
 }
 
 // RouteQuote holds the result for a provider. A zero quote with no error is pending.
-type RouteQuote struct {
-	Provider   Provider
-	Quote      swap.FlowQuote
-	FeeBTC     string
-	ETASeconds int
-	Err        error
-}
+type RouteQuote swap.BTCRouteQuote
 
 // QuoteResultMsg carries one provider's response back to the panel.
 type QuoteResultMsg struct {

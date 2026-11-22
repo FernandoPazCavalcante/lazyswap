@@ -64,12 +64,13 @@ const (
 
 // Model owns the main-screen state machine.
 type Model struct {
-	dao       *walletpkg.DAO
-	svc       *walletpkg.Service
-	balSvc    *balance.Service
-	flowSvc   *swap.Flow
-	safetySvc *safety.Service
-	monitor   *api.Monitor
+	dao          *walletpkg.DAO
+	svc          *walletpkg.Service
+	balSvc       *balance.Service
+	btcProviders []swap.BTCProvider
+	flowSvc      *swap.Flow
+	safetySvc    *safety.Service
+	monitor      *api.Monitor
 
 	panel    walletpanel.Model
 	tokens   tokenspanel.Model
@@ -127,7 +128,12 @@ func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, da
 	}
 	alertsPanel := alertspanel.New()
 	alertsPanel.SetRegistered(monitorKey != "")
-	btcPanel := swapbtcpanel.New(swapbtcpanel.THORChain)
+	providers := swap.ActiveBTCProviders()
+	var ids []swap.BTCProviderID
+	for _, provider := range providers {
+		ids = append(ids, provider.ID)
+	}
+	btcPanel := swapbtcpanel.New(ids...)
 	btcPanel.SetNetwork(c.Name)
 	return Model{
 		dao:           dao,
@@ -141,6 +147,7 @@ func New(svc *walletpkg.Service, balSvc *balance.Service, flowSvc *swap.Flow, da
 		alerts:        alertsPanel,
 		settings:      settingspanel.New(st.Slippage, chainKey, c.Name),
 		swapbtc:       btcPanel,
+		btcProviders:  providers,
 		imp:           importoverlay.New(),
 		focus:         focusLeft,
 		activeTab:     tabTokens,

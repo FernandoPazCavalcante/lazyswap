@@ -36,6 +36,9 @@ func (m Model) View() string {
 }
 
 func (m Model) bodyForState() string {
+	if len(m.providers) == 0 {
+		return "  No active BTC swap providers."
+	}
 	switch m.state {
 	case stateForm:
 		return m.formBody()
@@ -80,6 +83,9 @@ func (m Model) formWithError(rows []string) string {
 }
 
 func (m Model) helpForState() string {
+	if len(m.providers) == 0 {
+		return ""
+	}
 	switch m.state {
 	case stateForm:
 		switch m.field {
