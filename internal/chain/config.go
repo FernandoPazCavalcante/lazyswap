@@ -29,7 +29,9 @@ type Config struct {
 	PassAddress string
 	// OpenOceanKey is the chain name in the OpenOcean API (via the lazyswap
 	// backend). Empty means API swap mode is unavailable on this chain.
-	OpenOceanKey      string
+	OpenOceanKey string
+	// NearIntentsChain identifies the origin in the 1Click token catalog.
+	NearIntentsChain  string
 	Tokens            map[string]TokenInfo
 	RecommendedTokens []TokenInfo
 }
@@ -40,16 +42,17 @@ const DefaultKey = "bsc"
 // CHAINS is the registry of supported chains. Keys match the Bun reference.
 var CHAINS = map[string]Config{
 	"ethereum": {
-		ChainID:        1,
-		Name:           "Ethereum",
-		RPCURL:         "https://ethereum-rpc.publicnode.com",
-		RouterAddress:  "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-		WrappedNative:  "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-		NativeSymbol:   "ETH",
-		NativeDecimals: 18,
-		ExplorerAPIURL: "https://api.etherscan.io/api",
-		StablecoinAddr: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
-		OpenOceanKey:   "eth",
+		ChainID:          1,
+		Name:             "Ethereum",
+		RPCURL:           "https://ethereum-rpc.publicnode.com",
+		RouterAddress:    "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+		WrappedNative:    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+		NativeSymbol:     "ETH",
+		NativeDecimals:   18,
+		ExplorerAPIURL:   "https://api.etherscan.io/api",
+		StablecoinAddr:   "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
+		OpenOceanKey:     "eth",
+		NearIntentsChain: "eth",
 		Tokens: map[string]TokenInfo{
 			"USDC": {Address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", Decimals: 6, Symbol: "USDC"},
 			"WETH": {Address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", Decimals: 18, Symbol: "WETH"},
@@ -73,16 +76,17 @@ var CHAINS = map[string]Config{
 	},
 
 	"bsc": {
-		ChainID:        56,
-		Name:           "BSC",
-		RPCURL:         "https://bsc-rpc.publicnode.com",
-		RouterAddress:  "0x10ED43C718714eb63d5aA57B78B54704E256024E", // PancakeSwap V2
-		WrappedNative:  "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
-		NativeSymbol:   "BNB",
-		NativeDecimals: 18,
-		ExplorerAPIURL: "https://api.bscscan.com/api",
-		StablecoinAddr: "0x55d398326f99059fF775485246999027B3197955", // USDT
-		OpenOceanKey:   "bsc",
+		ChainID:          56,
+		Name:             "BSC",
+		RPCURL:           "https://bsc-rpc.publicnode.com",
+		RouterAddress:    "0x10ED43C718714eb63d5aA57B78B54704E256024E", // PancakeSwap V2
+		WrappedNative:    "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+		NativeSymbol:     "BNB",
+		NativeDecimals:   18,
+		ExplorerAPIURL:   "https://api.bscscan.com/api",
+		StablecoinAddr:   "0x55d398326f99059fF775485246999027B3197955", // USDT
+		OpenOceanKey:     "bsc",
+		NearIntentsChain: "bsc",
 		Tokens: map[string]TokenInfo{
 			"USDC": {Address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", Decimals: 18, Symbol: "USDC"},
 			"WBNB": {Address: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", Decimals: 18, Symbol: "WBNB"},

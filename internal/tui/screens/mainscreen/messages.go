@@ -123,7 +123,7 @@ func executeSwapCmd(f *swap.Flow, privateKey string, from, to swap.TokenInfo, us
 	}
 }
 
-func btcQuoteCmd(p swap.BTCProvider, f *swap.Flow, req swapbtcpanel.QuoteRequestMsg) tea.Cmd {
+func btcQuoteCmd(p swap.BTCProvider, f *swap.Flow, req swapbtcpanel.QuoteRequestMsg, sender string, slippage float64) tea.Cmd {
 	return func() tea.Msg {
 		result := swapbtcpanel.QuoteResultMsg{ID: req.ID, Route: swapbtcpanel.RouteQuote{Provider: p.ID}}
 		if f == nil {
@@ -132,8 +132,9 @@ func btcQuoteCmd(p swap.BTCProvider, f *swap.Flow, req swapbtcpanel.QuoteRequest
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		result.Route = swapbtcpanel.RouteQuote(p.Quote(f, ctx, req.From, req.USDAmount, req.BTCAddress))
+		result.Route = swapbtcpanel.RouteQuote(p.Quote(f, ctx, swap.BTCQuoteRequest{From: req.From, USD: req.USDAmount, Destination: req.BTCAddress, Sender: sender, Slippage: slippage}))
 		result.Route.Provider = p.ID
+		result.Route.QuoteOnly = p.Execute == nil
 		return result
 	}
 }

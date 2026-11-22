@@ -21,7 +21,7 @@ func (m Model) handleSwapBTCMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 		}
 		var cmds []tea.Cmd
 		for _, p := range m.btcProviders {
-			cmds = append(cmds, btcQuoteCmd(p, m.flowSvc, msg))
+			cmds = append(cmds, btcQuoteCmd(p, m.flowSvc, msg, m.current.Address, m.slippage))
 		}
 		return m, tea.Batch(cmds...), true
 	case swapbtcpanel.ExecuteRequestMsg:
@@ -29,7 +29,7 @@ func (m Model) handleSwapBTCMsg(msg tea.Msg) (Model, tea.Cmd, bool) {
 			return m, nil, true
 		}
 		for _, p := range m.btcProviders {
-			if p.ID == msg.Provider {
+			if p.ID == msg.Provider && p.Execute != nil {
 				applog.Tracef("mainscreen — executing BTC swap via %s for %s", p.ID, m.current.Address)
 				return m, btcExecuteCmd(p, m.flowSvc, m.current.PrivateKey, msg), true
 			}

@@ -106,6 +106,9 @@ func (m Model) helpForState() string {
 	case stateAddress:
 		return "Enter get quotes · Esc back"
 	case stateReview:
+		if m.selectedQuote().QuoteOnly {
+			return "Quote only · a address · r refresh · Esc"
+		}
 		return "y confirm swap · a address · r refresh · Esc"
 	case stateExecuting:
 		return "waiting for receipt…"

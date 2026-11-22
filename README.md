@@ -14,8 +14,12 @@ PancakeSwap).
 
 ## Highlights
 
-- **Swap BTC availability.** THORChain is disabled. The TUI shows an empty
-  provider list until another BTC swap provider is enabled.
+- **BTC quotes.** The Swap BTC tab compares LI.FI and NEAR Intents estimates
+  from Ethereum and BNB Chain. LI.FI can estimate before you enter a BTC
+  address. NEAR Intents requires a Bitcoin mainnet recipient. These providers
+  support quote review only. THORChain is disabled.
+  Set `LAZYSWAP_NEAR_INTENTS_API_KEY` for 1Click partner authentication and
+  `LAZYSWAP_LIFI_API_KEY` if using a LI.FI API key.
 - **Self-custody, no exchange.** You hold the keys; trades go straight to a DEX.
   No account, no KYC, no deposits, no withdrawal queue.
 - **Encrypted on disk.** Your private key is sealed with AES-256-GCM under a

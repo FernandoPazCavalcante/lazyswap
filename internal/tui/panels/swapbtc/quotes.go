@@ -3,6 +3,7 @@ package swapbtc
 import (
 	"cmp"
 	"errors"
+	"github.com/FernandoPazCavalcante/lazyswap/internal/swap"
 	"slices"
 	"time"
 
@@ -19,6 +20,8 @@ func (r RouteQuote) pending() bool {
 
 func (r RouteQuote) status(at time.Time) string {
 	switch {
+	case errors.Is(r.Err, swap.ErrBTCDestinationRequired):
+		return "BTC address required"
 	case r.Err != nil:
 		return "Unavailable"
 	case r.pending():
@@ -124,10 +127,10 @@ func (m Model) handleQuoteKey(key string, at time.Time) (Model, tea.Cmd) {
 	case " ":
 		m.expanded = !m.expanded
 	case "enter":
+		if m.destination == "" {
+			return m.editAddress()
+		}
 		if m.selectedQuote().valid(at) {
-			if m.destination == "" {
-				return m.editAddress()
-			}
 			m.state = stateReview
 		}
 	}
@@ -157,7 +160,7 @@ func (m Model) handleReviewKey(key string, at time.Time) (Model, tea.Cmd) {
 		m.state = stateQuotes
 		return m, nil
 	}
-	if key == "y" {
+	if key == "y" && !route.QuoteOnly {
 		m.state = stateExecuting
 		msg := ExecuteRequestMsg{ID: m.requestID, Provider: route.Provider, Quote: route.Quote}
 		return m, func() tea.Msg { return msg }

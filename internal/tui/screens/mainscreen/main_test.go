@@ -22,9 +22,12 @@ import (
 
 const hardhatPhrase = "test test test test test test test test test test test junk"
 
-func TestSwapBTCDisabledByDefault(t *testing.T) {
+func TestSwapBTCEmptyCatalog(t *testing.T) {
 	m := newModel(t)
 	m.current = &wallet.Wallet{}
+	m.btcProviders = nil
+	m.swapbtc = swapbtcpanel.New()
+	m.swapbtc.SetSize(80, 24)
 	if !strings.Contains(m.swapbtc.View(), "No active BTC swap providers") {
 		t.Fatal("missing empty provider state")
 	}
@@ -37,9 +40,9 @@ func TestSwapBTCRequestsEveryActiveProvider(t *testing.T) {
 	m := newModel(t)
 	m.current = &wallet.Wallet{}
 	m.flowSvc = &swap.Flow{}
-	quote := func(_ *swap.Flow, _ context.Context, from swap.TokenInfo, usd, address string) swap.BTCRouteQuote {
-		if from.Symbol != "BNB" || usd != "25" || address != "" {
-			t.Fatalf("wrong estimate inputs: %s %s %s", from.Symbol, usd, address)
+	quote := func(_ *swap.Flow, _ context.Context, r swap.BTCQuoteRequest) swap.BTCRouteQuote {
+		if r.From.Symbol != "BNB" || r.USD != "25" || r.Destination != "" {
+			t.Fatalf("wrong estimate inputs: %s %s %s", r.From.Symbol, r.USD, r.Destination)
 		}
 		return swap.BTCRouteQuote{FeeBTC: "0.00001"}
 	}
