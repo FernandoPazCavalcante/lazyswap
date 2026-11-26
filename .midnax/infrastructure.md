@@ -1,17 +1,18 @@
 # Infrastructure
 
-**Cloud provider:** Cloudflare (Workers for frontend deployment)
+**Cloud provider:** Cloudflare (Workers for frontend SPA + install-script routing)
 
-**Blockchain networks:** EVM chains (Ethereum, BSC, BSC Testnet, Sepolia) via public JSON-RPC endpoints; THORchain for cross-chain BTC swaps
+**IaC tool:** None (Wrangler config in `wrangler.jsonc` for Workers; Foundry config in `foundry.toml` for contracts)
 
-**Container/orchestration:** None — pure local binary (lazyswap) and serverless (Cloudflare Workers)
+**Container/orchestration:** None (serverless only; Go CLI is a local binary with no backend container)
 
 **Key managed services:**
-- Cloudflare Workers (frontend hosting + routing)
-- Public EVM RPC endpoints (chain-specific, configured in internal/chain/config.go)
-- THORchain API (cross-chain swap routing)
-- GoPlus API (token risk assessment)
-- OpenOcean aggregator (API swap route; backend not deployed as of v0.1.0)
-- Etherscan / BSCScan / PolygonScan / Arbiscan / BaseScan (block explorer APIs, contract verification)
+- Cloudflare Workers (frontend deployment, install-script host)
+- Public EVM RPC endpoints (configured per chain in `internal/chain/config.go`; lazyswap connects at runtime)
+- THORchain API (cross-chain BTC swap routing)
+- LI.FI API (BTC quote provider; optional API key via `LAZYSWAP_LIFI_API_KEY`)
+- NEAR Intents API (BTC quote provider; optional API key via `LAZYSWAP_NEAR_INTENTS_API_KEY`)
+- GoPlus API (pre-swap token risk check; fail-closed)
+- GitHub API (self-update mechanism in lazyswap; release asset downloads)
+- Blockchain networks: Ethereum, BSC, BSC Testnet, Sepolia (EVM); Bitcoin (cross-chain via LI.FI / NEAR Intents)
 
-**IaC:** None documented; Foundry scripts (Deploy.s.sol, DeployPass.s.sol) handle smart contract deployment
