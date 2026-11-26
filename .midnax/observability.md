@@ -1,11 +1,12 @@
 # Observability
 
-## Backend (Go)
-- **Logging:** File-based logger (internal/applog) → ~/.lazyswap/lazyswap.log; never stdout/stderr (preserves TUI and MCP JSON-RPC stream)
-- **Test isolation:** LAZYSWAP_TEST=1 routes log to /dev/null
+## Frontend (lazyswap-site)
+- **Observability enabled:** Cloudflare Workers observability (`observability.enabled: true` in wrangler.jsonc)
 
-## Frontend (React/Vite)
-- **Cloudflare Workers:** Observability enabled (observability.enabled: true in wrangler.jsonc)
+## Backend (lazyswap)
+- **Logging:** File-based logger (`internal/applog`) → `~/.lazyswap/lazyswap.log`; never writes to stdout/stderr outside CLI (preserves TUI and MCP JSON-RPC stream)
+- **Test isolation:** `LAZYSWAP_TEST=1` routes log to `/dev/null`
 
-## Smart Contracts (Solidity)
-- **Coverage:** Line coverage ≥70% over src/ (test mocks and deploy scripts excluded); enforced in CI via scripts/coverage-gate.sh
+## Smart Contracts
+- No observability tooling configured
+
